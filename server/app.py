@@ -14,9 +14,9 @@ Run locally
 -----------
 ::
 
-    cd onshape-app/server
+    cd server
     pip install -r requirements.txt
-    cp ../../.env.example ../../.env   # then fill in credentials
+    cp ../.env.example ../.env   # then fill in credentials
     uvicorn app:app --reload
 
 """
