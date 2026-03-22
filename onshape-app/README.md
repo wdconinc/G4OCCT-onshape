@@ -13,35 +13,141 @@ files or running G4OCCT locally.
 ## Architecture
 
 ```
-Onshape iframe  ──HTTPS──►  App Server  ──job dispatch──►  G4OCCT Worker
-                                 │                              │
-                                 └── Onshape REST API proxy ◄──┘
+┌─────────────────────────────────────────┐
+│  Onshape (browser)                      │
+│  ┌───────────────────────────────────┐  │
+│  │  G4OCCT iframe tab                │  │
+│  │  (served by App Server over HTTPS)│  │
+│  └──────────────┬────────────────────┘  │
+└─────────────────│───────────────────────┘
+                  │ HTTPS + session cookie
+                  ▼
+┌─────────────────────────────────────────┐
+│  G4OCCT App Server                      │
+│  • OAuth 2.0 handler                    │
+│  • Onshape REST API proxy (STEP export) │
+│  • Job queue & dispatcher               │
+└──────┬──────────────────────────────────┘
+       │ job dispatch (STEP + simulation config)
+       ├──────────────────────────────────►  Remote worker (cloud / HPC)
+       └──────────────────────────────────►  Local worker  (Docker / Apptainer)
 ```
+
+OAuth tokens are kept **server-side** and are **never** exposed to the browser
+or the iframe JavaScript context.
 
 | Component | Technology |
 |---|---|
 | App Server | Python · FastAPI |
-| Job queue | SQLite (development) |
-| Frontend | Plain HTML + JS |
+| Job queue | SQLite (development); swap for Redis/PostgreSQL in production |
+| Frontend | Plain HTML + JS (no build step required) |
 | Worker | Python polling loop + G4OCCT binary |
 | Container | Docker / Apptainer |
 
 ---
 
+## Roadmap
+
+### Phase 1 — OAuth Scaffold ✅
+
+*Milestone: OAuth handshake works, iframe loads inside an Onshape tab.*
+
+- [x] Implement App Server with OAuth 2.0 flow (`/oauth/start`, `/oauth/callback`, `/oauth/logout`)
+- [x] Server-side session management — tokens are never sent to the browser
+- [x] Serve a minimal iframe page that reads and displays `documentId` / `workspaceId` / `elementId`
+- [ ] **[human]** Register an OAuth application in the [Onshape Developer Portal](https://dev-portal.onshape.com/), set the redirect URI to `https://<app-host>/oauth/callback`, and record the `CLIENT_ID` and `CLIENT_SECRET`
+- [ ] **[human]** Register an iframe tab extension in the Developer Portal pointing at `https://<app-host>/app`
+- [ ] **[human]** Verify the iframe loads correctly inside a live Onshape document
+
+### Phase 2 — STEP Export Integration ✅
+
+*Milestone: STEP file retrieved from a live document.*
+
+- [x] Implement Onshape REST API proxy (`GET /api/element/metadata`, `POST /api/element/export-step`)
+- [x] Support both Part Studio and Assembly element types
+- [x] Display element metadata (name, type) in the iframe UI
+- [ ] **[human]** Test with real Part Studio and Assembly documents
+
+### Phase 3 — Remote Worker ✅
+
+*Milestone: end-to-end simulation via cloud/HPC worker.*
+
+- [x] Implement worker HTTP interface (`POST /workers/register`, `GET /jobs/next`, `POST /jobs/{id}/result`)
+- [x] SQLite-backed job queue (queued → running → complete / failed)
+- [x] Worker `Dockerfile` for containerised deployment
+- [x] Stub simulation runner with fallback when the G4OCCT binary is absent
+- [ ] **[human]** Choose and provision compute infrastructure (cloud VM, NERSC, or institutional HPC)
+- [ ] **[human]** Build and publish `ghcr.io/wdconinc/g4occt-worker:latest` to the GitHub Container Registry
+- [ ] **[human]** Implement and test the real G4OCCT simulation runner binary inside the container (replace the stub in `run_worker.py`)
+- [ ] **[human]** Wire App Server → remote worker STEP handoff in a live deployment
+
+### Phase 4 — UI & Results ✅
+
+*Milestone: usable simulation controls and results in the iframe.*
+
+- [x] Simulation parameter controls (type, particle, number of events, element type)
+- [x] Job submission and status display
+- [x] Job polling loop (client-side, configurable interval)
+- [x] Results display (JSON viewer)
+- [ ] **[human / future]** Richer results visualisation: geometry summary, material map, 3D viewer (Three.js / Plotly)
+- [ ] **[human / future]** WebSocket-based push updates instead of polling
+
+### Phase 5 — Local Worker ✅
+
+*Milestone: simulation runs on the user's own machine.*
+
+- [x] Outbound polling protocol (worker → App Server, no inbound connections required)
+- [x] Worker registration and heartbeat (`POST /workers/register`)
+- [x] Worker `Dockerfile` and Apptainer `.def` for HPC environments without Docker
+- [ ] **[human]** Publish the worker image so users can `docker pull` it
+- [ ] **[human]** Document the per-user worker token issuance flow in the App Server UI
+- [ ] **[human]** Test NAT traversal: worker on a laptop, App Server in the cloud
+
+### Phase 6 — Polish & Distribution 🔲
+
+*Milestone: Onshape App Store or enterprise deployment.*
+
+- [ ] Security review: token scoping, STEP file sanitisation, multi-tenancy isolation, worker token rotation
+- [ ] Performance: caching of STEP exports, worker auto-scaling
+- [ ] Replace SQLite job queue with a production-grade backend (Redis + Celery or PostgreSQL)
+- [ ] Material mapping: Onshape material names → Geant4 `G4Material` (see [material bridging docs](https://wdconinc.github.io/G4OCCT/#/material_bridging))
+- [ ] **[human]** Decide on simulation scope for the first public release (geantino navigation scans only, or full physics from the outset)
+- [ ] **[human]** Decide on multi-tenancy model (individual Onshape accounts vs. enterprise/company-level OAuth)
+- [ ] **[human]** Decide whether simulation results are written back into the Onshape document as a Blob Element or displayed transiently
+- [ ] **[human]** Submit to the [Onshape App Store](https://appstore.onshape.com/) (requires Onshape partner agreement)
+- [ ] User documentation and quick-start guide for end users
+
+---
+
 ## Quick Start (local development)
 
-### 1. Register an Onshape OAuth application
+### Prerequisites
+
+- Docker and Docker Compose
+- An Onshape account (free or paid)
+- Credentials from the Onshape Developer Portal (see step 1 below)
+
+### 1. Register an Onshape OAuth application ⚠️ *human step*
+
+> This step requires a human with an Onshape account.
 
 1. Go to the [Onshape Developer Portal](https://dev-portal.onshape.com/).
-2. Create a new OAuth application.
-3. Set the **Redirect URI** to `http://localhost:8000/oauth/callback`.
-4. Note the **Client ID** and **Client Secret**.
+2. Create a new **OAuth application**.
+3. Set the **Redirect URI** to `http://localhost:8000/oauth/callback` (for local dev)
+   or `https://<your-host>/oauth/callback` (for production).
+4. Note the **Client ID** and **Client Secret** — you will need them in step 2.
+5. Add an **iframe extension** pointing at `http://localhost:8000/app` to see the tab inside Onshape.
 
 ### 2. Configure environment
 
 ```bash
+# From the repository root:
 cp .env.example .env
-# Edit .env and fill in ONSHAPE_CLIENT_ID, ONSHAPE_CLIENT_SECRET, etc.
+# Open .env and fill in at minimum:
+#   ONSHAPE_CLIENT_ID
+#   ONSHAPE_CLIENT_SECRET
+#   SESSION_SECRET   (generate: python3 -c "import secrets; print(secrets.token_hex(32))")
+#   WORKER_TOKEN     (generate: python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 ```
 
 ### 3. Run with Docker Compose
@@ -50,14 +156,17 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The App Server is now available at <http://localhost:8000>.  Open
-<http://localhost:8000/app> to see the iframe UI.
+The App Server is now available at <http://localhost:8000>.
+Open <http://localhost:8000/app> to see the iframe UI.
 
-### 4. Register the iframe tab in Onshape
-
-In the Onshape Developer Portal, register an **iframe extension** pointing at
-`http://localhost:8000/app` (for local testing use an ngrok/Cloudflare Tunnel
-URL so Onshape can reach your machine over HTTPS).
+> **Note:** For Onshape to load the iframe, the server must be reachable over HTTPS.
+> For local testing, expose localhost via [ngrok](https://ngrok.com/) or
+> [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
+> ```bash
+> ngrok http 8000
+> # update the Redirect URI and iframe extension URL in the Developer Portal
+> # update APP_HOST in .env
+> ```
 
 ---
 
@@ -67,7 +176,7 @@ URL so Onshape can reach your machine over HTTPS).
 cd onshape-app/server
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-# Copy and edit .env at the repository root
+# ensure .env exists at the repository root
 uvicorn app:app --reload --port 8000
 ```
 
@@ -80,7 +189,7 @@ Start a local simulation worker that polls the App Server for jobs:
 ```bash
 docker run --rm \
   -e G4OCCT_SERVER=https://<app-server-host> \
-  -e G4OCCT_WORKER_TOKEN=<token-from-app-ui> \
+  -e G4OCCT_WORKER_TOKEN=<token-from-env> \
   ghcr.io/wdconinc/g4occt-worker:latest
 ```
 
@@ -93,23 +202,26 @@ G4OCCT_WORKER_TOKEN=<token> \
 apptainer run g4occt-worker.sif
 ```
 
+> **Note:** The worker image must be built and published by a human with access
+> to the container registry (see Phase 5 roadmap items above).
+
 ---
 
 ## Directory Structure
 
 ```
 onshape-app/
-├── server/          App Server (OAuth, API proxy, job queue)
-│   ├── app.py       FastAPI application
-│   ├── oauth.py     Onshape OAuth 2.0 helpers
-│   ├── jobs.py      SQLite-backed job queue
+├── server/              App Server (OAuth, API proxy, job queue)
+│   ├── app.py           FastAPI application
+│   ├── oauth.py         Onshape OAuth 2.0 helpers
+│   ├── jobs.py          SQLite-backed job queue
 │   ├── requirements.txt
 │   └── Dockerfile
-├── worker/          G4OCCT simulation worker
-│   ├── run_worker.py    Polling loop + simulation runner
+├── worker/              G4OCCT simulation worker
+│   ├── run_worker.py    Polling loop + simulation runner stub
 │   ├── Dockerfile
-│   └── apptainer.def
-└── frontend/        iframe UI (served as static files by the App Server)
+│   └── apptainer.def    Apptainer / Singularity definition for HPC
+└── frontend/            iframe UI (served as static files by the App Server)
     ├── index.html
     ├── app.js
     └── style.css
@@ -131,36 +243,61 @@ onshape-app/
 
 | Endpoint | Description |
 |---|---|
-| `GET /app` | Serve the iframe frontend (requires auth) |
+| `GET /app` | Serve the iframe frontend (triggers OAuth if not authenticated) |
 
 ### Onshape REST API Proxy
 
 All calls use the server-side stored access token — tokens are **never**
 sent to the browser.
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/element/metadata` | Element name and type |
-| `POST /api/element/export-step` | Export STEP geometry from Part Studio or Assembly |
+| Endpoint | Query parameters | Description |
+|---|---|---|
+| `GET /api/element/metadata` | `documentId`, `workspaceId`, `elementId` | Element name and type |
+| `POST /api/element/export-step` | `documentId`, `workspaceId`, `elementId`, `elementType` | Export STEP geometry |
 
 ### Job Management
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/jobs` | List user's jobs |
-| `POST /api/jobs` | Submit a new simulation job |
-| `GET /api/jobs/{id}` | Get job status and results |
+Requires an authenticated session (session cookie set by OAuth flow).
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/jobs` | `GET` | List the authenticated user's jobs |
+| `/api/jobs` | `POST` | Submit a new simulation job |
+| `/api/jobs/{id}` | `GET` | Get job status and results |
+
+**Submit job body:**
+```json
+{
+  "documentId": "...",
+  "workspaceId": "...",
+  "elementId": "...",
+  "elementType": "partstudio",
+  "simulationConfig": {
+    "type": "geantino_scan",
+    "particleType": "geantino",
+    "nEvents": 1000
+  }
+}
+```
 
 ### Worker API
 
-Workers authenticate with `X-Worker-Token` header.
+Workers authenticate with the `X-Worker-Token` request header.
 
-| Endpoint | Description |
-|---|---|
-| `POST /workers/register` | Register or refresh a worker |
-| `GET /workers` | List registered workers |
-| `GET /jobs/next?worker_id=…` | Claim the next queued job |
-| `POST /jobs/{id}/result` | Submit simulation results |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/workers/register` | `POST` | Register or refresh a worker |
+| `/workers` | `GET` | List registered workers |
+| `/jobs/next?worker_id=…` | `GET` | Claim the next queued job (204 if none) |
+| `/jobs/{id}/result` | `POST` | Submit simulation results or report failure |
+
+**Submit result body:**
+```json
+{
+  "status": "complete",
+  "results": { "volumes": 12, "navigation": "ok" }
+}
+```
 
 ---
 
@@ -168,30 +305,25 @@ Workers authenticate with `X-Worker-Token` header.
 
 * OAuth tokens are stored **server-side** in the session; they are never
   sent to the browser or the iframe JavaScript context.
-* The `SESSION_SECRET` and `WORKER_TOKEN` environment variables must be
-  set to strong random values in production.
+* Set `SESSION_SECRET` and `WORKER_TOKEN` to strong random values in production
+  (see `.env.example` for generation commands).
 * HTTPS is **required** in production — Onshape will not load non-HTTPS iframes.
-* STEP file payloads are treated as ephemeral; they should be deleted after
-  job completion in a production deployment.
-* See [Phase 6 of the roadmap](https://github.com/wdconinc/G4OCCT-onshape)
-  for planned security hardening.
+* STEP file payloads are treated as ephemeral; delete them after job completion
+  in a production deployment.
+* A full security review is planned as part of Phase 6 before any public release.
 
 ---
 
-## Development Roadmap
+## Running Tests
 
-See the [planning document](https://github.com/wdconinc/G4OCCT-onshape/issues/1) for the full
-six-phase roadmap.  Current status:
-
-- [x] **Phase 1** — OAuth scaffold (server + iframe)
-- [x] **Phase 2** — STEP export & metadata proxy
-- [x] **Phase 3** — Job queue + remote worker HTTP interface
-- [x] **Phase 4** — Job polling & results display in UI
-- [x] **Phase 5** — Local worker outbound polling + Docker/Apptainer images
-- [ ] **Phase 6** — Security hardening, performance, App Store submission
+```bash
+pip install -r onshape-app/server/requirements.txt pytest
+pytest tests/ -v
+```
 
 ---
 
 ## License
 
 LGPL-2.1-or-later · Copyright (C) 2026 G4OCCT Contributors
+
