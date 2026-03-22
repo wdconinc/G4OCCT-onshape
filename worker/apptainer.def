@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright (C) 2026 G4OCCT Contributors
+#
+# Apptainer / Singularity definition for the G4OCCT simulation worker.
+# Suitable for HPC environments that do not support Docker.
+#
+# Build:
+#   apptainer build g4occt-worker.sif apptainer.def
+#
+# Run:
+#   G4OCCT_SERVER=https://<app-server-host> \
+#   G4OCCT_WORKER_TOKEN=<token> \
+#   apptainer run g4occt-worker.sif
+
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+    Maintainer G4OCCT Contributors
+    Version 0.1.0
+    Description G4OCCT simulation worker (Geant4 + OCCT)
+
+%environment
+    export G4OCCT_SERVER=${G4OCCT_SERVER:-http://localhost:8000}
+    export G4OCCT_WORKER_TOKEN=${G4OCCT_WORKER_TOKEN:-}
+    export G4OCCT_POLL_INTERVAL=${G4OCCT_POLL_INTERVAL:-5}
+    export GEANT4_VERSION=${GEANT4_VERSION:-unknown}
+    export OCCT_VERSION=${OCCT_VERSION:-unknown}
+    export G4OCCT_VERSION=${G4OCCT_VERSION:-unknown}
+
+%post
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv \
+        libgomp1
+    rm -rf /var/lib/apt/lists/*
+    python3 -m pip install --no-cache-dir httpx
+    mkdir -p /app
+
+%files
+    run_worker.py /app/run_worker.py
+
+%runscript
+    exec python3 /app/run_worker.py "$@"
+
+%help
+    G4OCCT simulation worker for the Onshape integration.
+
+    Required environment variables:
+      G4OCCT_SERVER       URL of the G4OCCT App Server
+      G4OCCT_WORKER_TOKEN Authentication token (from the App Server UI)
+
+    Optional:
+      G4OCCT_POLL_INTERVAL  Polling interval in seconds (default: 5)
+      G4OCCT_WORKER_ID      Unique worker identifier (auto-generated if unset)
+      G4OCCT_RUNNER         Path to the compiled g4occt_runner binary

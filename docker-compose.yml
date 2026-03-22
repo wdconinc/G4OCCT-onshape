@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright (C) 2026 G4OCCT Contributors
+#
+# docker-compose.yml – local development stack.
+#
+# Usage:
+#   cp .env.example .env     # fill in ONSHAPE_CLIENT_ID / ONSHAPE_CLIENT_SECRET
+#   docker compose up --build
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ONSHAPE_CLIENT_ID=${ONSHAPE_CLIENT_ID}
+      - ONSHAPE_CLIENT_SECRET=${ONSHAPE_CLIENT_SECRET}
+      - APP_HOST=${APP_HOST:-http://localhost:8000}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - WORKER_TOKEN=${WORKER_TOKEN}
+      - JOB_DB_PATH=/data/jobs.db
+    volumes:
+      - ./frontend:/app/frontend:ro
+      - job_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: ./worker
+    environment:
+      - G4OCCT_SERVER=http://server:8000
+      - G4OCCT_WORKER_TOKEN=${WORKER_TOKEN}
+      - G4OCCT_POLL_INTERVAL=5
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  job_data:

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<!-- Copyright (C) 2026 G4OCCT Contributors -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G4OCCT – Geant4 Simulation</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <img src="/static/g4occt-logo.svg" alt="G4OCCT" class="logo" onerror="this.style.display='none'" />
+    <h1>G4OCCT <span class="subtitle">Geant4 Simulation</span></h1>
+    <div class="user-info" id="user-info"></div>
+  </header>
+
+  <main class="app-main">
+    <!-- Document context panel -->
+    <section class="card" id="context-panel">
+      <h2>Document Context</h2>
+      <dl id="context-list" class="data-list">
+        <dt>Document ID</dt><dd id="ctx-documentId">—</dd>
+        <dt>Workspace ID</dt><dd id="ctx-workspaceId">—</dd>
+        <dt>Element ID</dt><dd id="ctx-elementId">—</dd>
+        <dt>Element name</dt><dd id="ctx-elementName"><span class="loading">Loading…</span></dd>
+        <dt>Element type</dt><dd id="ctx-elementType">—</dd>
+      </dl>
+    </section>
+
+    <!-- Simulation controls -->
+    <section class="card" id="sim-controls">
+      <h2>Simulation Parameters</h2>
+      <form id="sim-form">
+        <div class="field">
+          <label for="sim-type">Simulation type</label>
+          <select id="sim-type" name="type">
+            <option value="geantino_scan">Geantino scan (geometry validation)</option>
+            <option value="full_physics">Full physics run</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="particle-type">Particle type</label>
+          <select id="particle-type" name="particleType">
+            <option value="geantino">geantino</option>
+            <option value="e-">electron (e⁻)</option>
+            <option value="gamma">gamma</option>
+            <option value="proton">proton</option>
+            <option value="neutron">neutron</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="n-events">Number of events</label>
+          <input id="n-events" name="nEvents" type="number" min="1" max="1000000" value="1000" />
+        </div>
+        <div class="field">
+          <label for="element-type-select">Onshape element type</label>
+          <select id="element-type-select" name="elementType">
+            <option value="partstudio">Part Studio</option>
+            <option value="assembly">Assembly</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+          Run Simulation
+        </button>
+      </form>
+    </section>
+
+    <!-- Active jobs -->
+    <section class="card" id="jobs-panel">
+      <h2>Jobs <button class="btn btn-small" id="refresh-jobs-btn">↻ Refresh</button></h2>
+      <div id="jobs-list"><p class="empty-state">No jobs yet.</p></div>
+    </section>
+
+    <!-- Results panel -->
+    <section class="card hidden" id="results-panel">
+      <h2>Simulation Results</h2>
+      <div id="results-content"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <a href="https://github.com/wdconinc/G4OCCT-onshape" target="_blank" rel="noopener">
+      G4OCCT-onshape
+    </a>
+    &nbsp;|&nbsp;
+    <a href="/oauth/logout">Log out</a>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
