@@ -23,6 +23,7 @@ services:
       - JOB_DB_PATH=/data/jobs.db
     volumes:
       - job_data:/data
+      - ./frontend:/app/frontend:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
