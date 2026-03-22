@@ -30,8 +30,10 @@ flowchart TD
     queue -- "job dispatch\n(STEP + simulation config)" --> local["Local worker\n(Docker / Apptainer)"]
 ```
 
-> OAuth tokens are kept **server-side** and are **never** exposed to the browser
-> or the iframe JavaScript context.
+> OAuth tokens are stored in a signed, HTTP-only session cookie managed by the
+> App Server. JavaScript in the iframe cannot read the raw token values, but
+> the tokens do reside in the browser as part of the session cookie and are
+> sent with each request over HTTPS.
 
 | Component | Technology |
 |---|---|

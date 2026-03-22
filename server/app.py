@@ -7,7 +7,8 @@ Responsibilities
 * Serve the iframe frontend (``/app``).
 * Manage Onshape OAuth 2.0 flow (``/oauth/start``, ``/oauth/callback``).
 * Proxy Onshape REST API calls (STEP export, metadata) on behalf of the
-  authenticated user; OAuth tokens are **never** exposed to the browser.
+  authenticated user; OAuth tokens are stored in a signed session cookie and
+  are not accessible to iframe JavaScript.
 * Manage a job queue and dispatch jobs to remote or local G4OCCT workers.
 
 Run locally
@@ -21,34 +22,79 @@ Run locally
 
 """
 
+import base64
 import json
 import os
 import secrets
+import urllib.parse
 from pathlib import Path
 
-import httpx
+# Load .env before importing local modules that read env vars at module level.
 from dotenv import load_dotenv
-from fastapi import Cookie, FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.sessions import SessionMiddleware
 
-import jobs as job_store
-import oauth as oauth_helper
+load_dotenv(Path(__file__).parent.parent / ".env")
+
+import httpx  # noqa: E402
+from fastapi import FastAPI, HTTPException, Query, Request, Response  # noqa: E402
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
+
+import jobs as job_store  # noqa: E402
+import oauth as oauth_helper  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-load_dotenv(Path(__file__).parent.parent.parent / ".env")
-
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
+
+# https_only=True sets the Secure flag on the session cookie (required in
+# production over HTTPS).  Set SESSION_HTTPS_ONLY=false for local HTTP dev.
+SESSION_HTTPS_ONLY = os.environ.get("SESSION_HTTPS_ONLY", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+# "none" is required for cross-site iframe cookies (Onshape embedding context).
+# Use "lax" or "strict" for same-site-only deployments.
+SESSION_COOKIE_SAMESITE = os.environ.get("SESSION_COOKIE_SAMESITE", "none")
+
 ONSHAPE_API_BASE = "https://cad.onshape.com/api"
 
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+# Frontend directory: configurable via env var.
+# In Docker, docker-compose mounts ./frontend at /app/frontend, so the default
+# Path(__file__).parent / "frontend" resolves correctly inside the container.
+# For local development (cd server && uvicorn app:app), set FRONTEND_DIR=../frontend.
+FRONTEND_DIR = Path(
+    os.environ.get("FRONTEND_DIR", Path(__file__).parent / "frontend")
+).resolve()
+
+# ---------------------------------------------------------------------------
+# Worker token / dev-mode configuration
+# ---------------------------------------------------------------------------
+
+_DEV_MODE = os.environ.get("DEV_MODE", "").lower() in {"1", "true", "yes", "on"}
+_WORKER_TOKEN = os.environ.get("WORKER_TOKEN", "")
+
+if not _WORKER_TOKEN and not _DEV_MODE:
+    raise RuntimeError(
+        "WORKER_TOKEN environment variable must be set. "
+        "Set DEV_MODE=true to disable token enforcement during local development."
+    )
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(title="G4OCCT Onshape App", version="0.1.0")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, https_only=False)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    https_only=SESSION_HTTPS_ONLY,
+    same_site=SESSION_COOKIE_SAMESITE,
+)
 
 # Serve static frontend files from /static
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
@@ -110,6 +156,10 @@ async def _onshape_post(access_token: str, path: str, body: dict) -> bytes:
 @app.get("/oauth/start")
 async def oauth_start(request: Request, next: str = "/app"):
     """Redirect the browser to Onshape's OAuth authorisation page."""
+    # Restrict 'next' to same-origin relative paths to prevent open-redirect
+    # attacks (e.g. ?next=https://evil.example).
+    if not next.startswith("/") or next.startswith("//"):
+        next = "/app"
     state = oauth_helper.generate_state()
     request.session["oauth_state"] = state
     request.session["oauth_next"] = next
@@ -198,9 +248,8 @@ async def serve_app(
             params["elementId"] = elementId
         next_url = "/app"
         if params:
-            import urllib.parse
             next_url += "?" + urllib.parse.urlencode(params)
-        return RedirectResponse(f"/oauth/start?next={next_url}")
+        return RedirectResponse("/oauth/start?next=" + urllib.parse.quote(next_url, safe=""))
 
     # Serve the static index.html – inject context via a <script> block so
     # that the frontend JS can read it without embedding OAuth tokens.
@@ -290,7 +339,7 @@ async def export_step(
     return Response(
         content=step_bytes,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="geometry.step"'},
+        headers={"Content-Disposition": 'attachment; filename="geometry.step"'},
     )
 
 
@@ -332,12 +381,44 @@ async def submit_job(request: Request):
     if missing:
         raise HTTPException(status_code=422, detail=f"Missing fields: {missing}")
 
+    element_type = body.get("elementType", "partstudio")
+    if element_type not in ("partstudio", "assembly"):
+        raise HTTPException(
+            status_code=400, detail="elementType must be 'partstudio' or 'assembly'"
+        )
+
+    # Export STEP geometry at submission time so the worker receives it in the
+    # job payload and can start the simulation immediately after claiming.
+    api_path = (
+        f"/{'partstudios' if element_type == 'partstudio' else 'assemblies'}"
+        f"/d/{body['documentId']}/w/{body['workspaceId']}/e/{body['elementId']}/export"
+    )
+    export_body: dict
+    if element_type == "partstudio":
+        export_body = {"formatName": "STEP", "storeInDocument": False, "yAxisIsUp": False}
+    else:
+        export_body = {
+            "formatName": "STEP",
+            "flattenAssemblies": False,
+            "storeInDocument": False,
+        }
+    try:
+        step_bytes = await _onshape_post(user["access_token"], api_path, export_body)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=f"STEP export failed: {exc}",
+        )
+
+    step_data = base64.b64encode(step_bytes).decode()
+
     job = await job_store.create_job(
         user_id=user["id"],
         document_id=body["documentId"],
         workspace_id=body["workspaceId"],
         element_id=body["elementId"],
         sim_config=body.get("simulationConfig", {}),
+        step_data=step_data,
     )
     return JSONResponse(job, status_code=201)
 
@@ -411,11 +492,31 @@ async def submit_result(request: Request, job_id: str):
 
         {
           "status": "complete" | "failed",
+          "worker_id": "unique-worker-id",
           "results": { ... }   // or "error": "..." on failure
         }
     """
     _verify_worker_token(request)
     body = await request.json()
+
+    # Verify the job exists, is in running state, and belongs to the
+    # submitting worker (prevents one worker from overwriting another's results).
+    existing_job = await job_store.get_job(job_id)
+    if existing_job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if existing_job["status"] != "running":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job is not running (current state: {existing_job['status']})",
+        )
+    submitting_worker = body.get("worker_id")
+    if (
+        submitting_worker
+        and existing_job.get("worker_id")
+        and existing_job["worker_id"] != submitting_worker
+    ):
+        raise HTTPException(status_code=403, detail="Worker ID mismatch")
+
     status = body.get("status", "complete")
     if status == "failed":
         job = await job_store.fail_job(job_id, body.get("error", "unknown error"))
@@ -441,14 +542,20 @@ async def health():
 # Internal utilities
 # ---------------------------------------------------------------------------
 
-_WORKER_TOKEN = os.environ.get("WORKER_TOKEN", "")
-
 
 def _verify_worker_token(request: Request) -> None:
-    """Raise 401 if the request does not carry a valid worker token."""
-    if not _WORKER_TOKEN:
-        # Token enforcement disabled – development mode only.
+    """Raise 401 if the request does not carry a valid worker token.
+
+    In explicit development mode (DEV_MODE=true) without a configured
+    WORKER_TOKEN, token enforcement is disabled to simplify local testing.
+    """
+    if not _WORKER_TOKEN and _DEV_MODE:
         return
+    if not _WORKER_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="Worker authentication is misconfigured on the server.",
+        )
     token = request.headers.get("X-Worker-Token", "")
     if not secrets.compare_digest(token, _WORKER_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid worker token")

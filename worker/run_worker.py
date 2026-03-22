@@ -161,7 +161,7 @@ def run_simulation(job: dict) -> dict:
 def submit_result(client: httpx.Client, job_id: str, results: dict) -> None:
     resp = client.post(
         f"{SERVER_URL}/jobs/{job_id}/result",
-        json={"status": "complete", "results": results},
+        json={"status": "complete", "worker_id": WORKER_ID, "results": results},
         headers=HEADERS,
         timeout=30,
     )
@@ -172,7 +172,7 @@ def submit_result(client: httpx.Client, job_id: str, results: dict) -> None:
 def submit_failure(client: httpx.Client, job_id: str, error: str) -> None:
     client.post(
         f"{SERVER_URL}/jobs/{job_id}/result",
-        json={"status": "failed", "error": error},
+        json={"status": "failed", "worker_id": WORKER_ID, "error": error},
         headers=HEADERS,
         timeout=30,
     )

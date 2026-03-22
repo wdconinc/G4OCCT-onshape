@@ -88,6 +88,7 @@ async def create_job(
     workspace_id: str,
     element_id: str,
     sim_config: dict,
+    step_data: str | None = None,
 ) -> dict:
     job_id = str(uuid.uuid4())
     now = _now()
@@ -96,8 +97,8 @@ async def create_job(
             """
             INSERT INTO jobs
                 (id, user_id, document_id, workspace_id, element_id,
-                 sim_config, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)
+                 sim_config, step_data, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
             """,
             (
                 job_id,
@@ -106,6 +107,7 @@ async def create_job(
                 workspace_id,
                 element_id,
                 json.dumps(sim_config),
+                step_data,
                 now,
                 now,
             ),
@@ -133,22 +135,34 @@ async def list_jobs(user_id: str) -> list[dict]:
 
 
 async def claim_next_job(worker_id: str) -> dict | None:
-    """Atomically claim the oldest queued job for *worker_id*."""
+    """Atomically claim the oldest queued job for *worker_id*.
+
+    Uses a single UPDATE … RETURNING statement so that the SELECT and UPDATE
+    happen as one indivisible operation, eliminating the TOCTOU race condition
+    that exists when the two are separate statements.
+    """
     now = _now()
     async with get_db() as db:
         async with db.execute(
-            "SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1"
+            """
+            UPDATE jobs
+            SET status = 'running', worker_id = ?, updated_at = ?
+            WHERE id IN (
+                SELECT id
+                FROM jobs
+                WHERE status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT 1
+            )
+            RETURNING *
+            """,
+            (worker_id, now),
         ) as cur:
             row = await cur.fetchone()
-        if row is None:
-            return None
-        job_id = row["id"]
-        await db.execute(
-            "UPDATE jobs SET status='running', worker_id=?, updated_at=? WHERE id=? AND status='queued'",
-            (worker_id, now, job_id),
-        )
         await db.commit()
-        return await get_job(job_id)
+    if row is None:
+        return None
+    return dict(row)
 
 
 async def complete_job(job_id: str, results: dict) -> dict | None:

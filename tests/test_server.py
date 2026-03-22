@@ -37,10 +37,16 @@ def _set_env(tmp_path, monkeypatch):
     """Set environment variables before importing the app module."""
     monkeypatch.setenv("JOB_DB_PATH", str(tmp_path / "test_jobs.db"))
     monkeypatch.setenv("SESSION_SECRET", "test-secret-key-not-for-production")
+    monkeypatch.setenv("SESSION_HTTPS_ONLY", "false")
     monkeypatch.setenv("WORKER_TOKEN", "")  # disable token enforcement
+    monkeypatch.setenv("DEV_MODE", "true")  # allow empty WORKER_TOKEN
     monkeypatch.setenv("ONSHAPE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("ONSHAPE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("APP_HOST", "http://testserver")
+    # Point at the real frontend directory so StaticFiles mount succeeds.
+    monkeypatch.setenv(
+        "FRONTEND_DIR", str(Path(__file__).parent.parent / "frontend")
+    )
 
 
 @pytest.fixture()
@@ -62,12 +68,15 @@ def authed_client(client):
 
     We patch ``_require_user`` and ``_get_session_user`` in the server module
     so that no real session cookie infrastructure is needed in tests.
+    We also patch ``_onshape_post`` to avoid real Onshape API calls during
+    job submission (STEP export).
     """
     import app as server_app
 
     with (
         patch.object(server_app, "_get_session_user", return_value=_FAKE_USER),
         patch.object(server_app, "_require_user", return_value=_FAKE_USER),
+        patch.object(server_app, "_onshape_post", return_value=b"STEP-stub"),
     ):
         yield client
 
@@ -231,6 +240,7 @@ def test_worker_submits_result(authed_client):
 
     resp = authed_client.post(f"/jobs/{job_id}/result", json={
         "status": "complete",
+        "worker_id": "w1",
         "results": {"volumes": 5, "navigation": "ok"},
     })
     assert resp.status_code == 200
@@ -246,6 +256,7 @@ def test_worker_reports_failure(authed_client):
 
     resp = authed_client.post(f"/jobs/{job_id}/result", json={
         "status": "failed",
+        "worker_id": "w1",
         "error": "Segmentation fault",
     })
     assert resp.status_code == 200

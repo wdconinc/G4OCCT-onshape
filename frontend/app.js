@@ -115,7 +115,10 @@ async function loadJobs() {
     const jobs = await resp.json();
     renderJobList(jobs);
   } catch (err) {
-    container.innerHTML = `<p class="empty-state">Error loading jobs: ${err.message}</p>`;
+    const p = document.createElement("p");
+    p.className = "empty-state";
+    p.textContent = `Error loading jobs: ${err.message}`;
+    container.replaceChildren(p);
   }
 }
 
@@ -159,7 +162,10 @@ async function showJobResult(jobId) {
     }
     content.innerHTML = html;
   } catch (err) {
-    content.innerHTML = `<p class="empty-state">Error loading result: ${err.message}</p>`;
+    const p = document.createElement("p");
+    p.className = "empty-state";
+    p.textContent = `Error loading result: ${err.message}`;
+    content.replaceChildren(p);
   }
 }
 
