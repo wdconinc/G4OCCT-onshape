@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+*.so
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Environment / secrets
+.env
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+.docker/
+
+# Node (if frontend tooling is added later)
+node_modules/
+dist/
+.parcel-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Apptainer image files
+*.sif
