@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright (C) 2026 G4OCCT Contributors
+#
+# Deploys the App Server to the Fly.io dev environment on every push to main.
+#
+# Required repository secret:
+#   FLY_API_TOKEN – generated with: flyctl tokens create deploy --app g4occt-dev
+#
+# One-time setup: see the "Development deployment on Fly.io" section in README.md.
+
+name: Deploy to Fly.io (dev)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy App Server to Fly.io dev
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

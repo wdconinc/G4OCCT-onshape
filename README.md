@@ -144,57 +144,56 @@ G4OCCT-onshape/
 
 ---
 
-## Quick Start (local development)
+## Deployment
 
-### Prerequisites
+---
 
+### A. Local development (localhost)
+
+**Prerequisites:**
 - Docker and Docker Compose
 - An Onshape account (free or paid)
-- OAuth credentials from the [Onshape Developer Portal](https://dev-portal.onshape.com/) (see step 1 below)
+- OAuth credentials from the [Onshape Developer Portal](https://dev-portal.onshape.com/)
 
-### 1. Register an Onshape OAuth application ⚠️ *human step*
+#### Step 1 — Register an Onshape OAuth application ⚠️ *human step*
 
 > This step requires a human with an Onshape account.
 
-1. Go to the [Onshape Developer Portal](https://dev-portal.onshape.com/).
+1. Go to https://dev-portal.onshape.com/
 2. Create a new **OAuth application**.
-3. Set the **Redirect URI** to `http://localhost:8000/oauth/callback` (for local dev)
-   or `https://<your-host>/oauth/callback` (for production).
-4. Note the **Client ID** and **Client Secret** — you will need them in step 2.
-5. Add an **iframe extension** pointing at `http://localhost:8000/app` to see the tab inside Onshape.
+3. Set the **Redirect URI** to `http://localhost:8000/oauth/callback`.
+4. Add an **iframe extension** pointing at `http://localhost:8000/app`.
+5. Note the **Client ID** and **Client Secret**.
 
-### 2. Configure environment
+#### Step 2 — Configure environment
 
 ```bash
 cp .env.example .env
-# Open .env and fill in at minimum:
+# Fill in at minimum:
 #   ONSHAPE_CLIENT_ID
 #   ONSHAPE_CLIENT_SECRET
 #   SESSION_SECRET   (generate: python3 -c "import secrets; print(secrets.token_hex(32))")
 #   WORKER_TOKEN     (generate: python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+#   APP_HOST=http://localhost:8000
+#   SESSION_HTTPS_ONLY=false
+#   SESSION_COOKIE_SAMESITE=lax
 ```
 
-### 3. Run with Docker Compose
+#### Step 3 — Run with Docker Compose
 
 ```bash
 docker compose up --build
 ```
 
-The App Server is now available at <http://localhost:8000>.
-Open <http://localhost:8000/app> to see the iframe UI.
+The App Server is available at http://localhost:8000. Open http://localhost:8000/app to see the iframe UI.
 
-> **Note:** Onshape requires HTTPS to load the iframe.  For local testing, expose
-> localhost via [ngrok](https://ngrok.com/) or
-> [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
+> **Note:** Onshape requires HTTPS to load the iframe. For local testing, expose localhost via [ngrok](https://ngrok.com/) or [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
 > ```bash
 > ngrok http 8000
-> # update the Redirect URI and iframe extension URL in the Developer Portal
-> # update APP_HOST in .env
+> # Update APP_HOST in .env and the redirect URI + iframe extension URL in the Developer Portal
 > ```
 
----
-
-## Running without Docker
+#### Running without Docker (optional)
 
 ```bash
 cd server
@@ -203,6 +202,94 @@ pip install -r requirements.txt
 # ensure .env exists at the repository root
 uvicorn app:app --reload --port 8000
 ```
+
+---
+
+### B. Development deployment on Fly.io (CI-updated)
+
+This deployment is automatically updated on every push to `main` via GitHub Actions. It provides a stable public HTTPS URL suitable for testing the Onshape OAuth flow and iframe integration without a local tunnel.
+
+#### One-time setup ⚠️ *human step*
+
+**Prerequisites:** [Install the Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) and log in:
+
+```bash
+brew install flyctl    # macOS
+# or: curl -L https://fly.io/install.sh | sh
+flyctl auth login
+```
+
+**1. Create the Fly app**
+
+```bash
+flyctl apps create g4occt-dev   # choose your own app name
+```
+
+This gives you a stable URL: `https://g4occt-dev.fly.dev`
+
+> **Note:** The app name `g4occt-dev` and region `iad` in `fly.toml` are examples; update them to match your chosen app name and preferred region.
+
+**2. Create a persistent volume for the SQLite job database**
+
+```bash
+flyctl volumes create job_data --size 1 --app g4occt-dev
+```
+
+**3. Register a second Onshape OAuth application** ⚠️ *human step*
+
+In the [Onshape Developer Portal](https://dev-portal.onshape.com/), create a separate OAuth application for the dev deployment:
+
+- **Redirect URI:** `https://g4occt-dev.fly.dev/oauth/callback`
+- **iframe extension URL:** `https://g4occt-dev.fly.dev/app`
+
+**4. Set secrets on the Fly app**
+
+```bash
+flyctl secrets set \
+  ONSHAPE_CLIENT_ID="<dev-client-id>" \
+  ONSHAPE_CLIENT_SECRET="<dev-client-secret>" \
+  APP_HOST="https://g4occt-dev.fly.dev" \
+  SESSION_SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
+  WORKER_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" \
+  SESSION_HTTPS_ONLY="true" \
+  SESSION_COOKIE_SAMESITE="none" \
+  --app g4occt-dev
+```
+
+**5. Add `FLY_API_TOKEN` to GitHub Actions secrets**
+
+```bash
+flyctl tokens create deploy --app g4occt-dev
+# Copy the output token, then add it as a GitHub Actions secret:
+# Repository → Settings → Secrets and variables → Actions → New repository secret
+# Name: FLY_API_TOKEN
+```
+
+> **Note:** The `FLY_API_TOKEN` secret must be added to the repository before the `deploy-fly-dev.yml` workflow will succeed.
+
+**After setup**, every push to `main` will automatically redeploy the server via the `deploy-fly-dev.yml` workflow.
+
+---
+
+### C. Production deployment
+
+For a production deployment, the same Fly.io approach can be used with a separate app name (e.g. `g4occt`), or you can deploy to any platform that supports Docker containers (Render, Railway, a cloud VM, etc.).
+
+Key differences from the dev deployment:
+
+| Setting | Dev (Fly.io) | Production |
+|---|---|---|
+| `APP_HOST` | `https://g4occt-dev.fly.dev` | `https://your-production-domain.com` |
+| `DEV_MODE` | `false` (default) | `false` |
+| `SESSION_HTTPS_ONLY` | `true` | `true` |
+| `SESSION_COOKIE_SAMESITE` | `none` | `none` |
+| Job queue | SQLite | Redis + Celery or PostgreSQL (Phase 6) |
+| Worker | Stub or local Docker | Real G4OCCT binary in container |
+| CI trigger | Push to `main` | Tagged release (`v*`) |
+
+Register a production OAuth application in the Onshape Developer Portal pointing at your production domain. Set all secrets as in the dev setup above, replacing the dev URL with your production URL.
+
+The `publish-containers.yml` workflow already publishes versioned container images to `ghcr.io` on `v*` tags, which can be pulled for production deployments.
 
 ---
 

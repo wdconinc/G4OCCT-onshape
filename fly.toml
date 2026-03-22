@@ -1,0 +1,40 @@
+# fly.toml – Fly.io dev deployment configuration for the App Server.
+# See: https://fly.io/docs/reference/configuration/
+
+app = "g4occt-dev"
+primary_region = "iad"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  JOB_DB_PATH = "/data/jobs.db"
+
+[mounts]
+  source = "job_data"
+  destination = "/data"
+
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+    [services.ports.force_https]
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
