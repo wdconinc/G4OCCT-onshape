@@ -13,29 +13,25 @@ export, no local G4OCCT install required.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────┐
-│  Onshape (browser)                      │
-│  ┌───────────────────────────────────┐  │
-│  │  G4OCCT iframe tab                │  │
-│  │  (served by App Server over HTTPS)│  │
-│  └──────────────┬────────────────────┘  │
-└─────────────────│───────────────────────┘
-                  │ HTTPS + session cookie
-                  ▼
-┌─────────────────────────────────────────┐
-│  G4OCCT App Server                      │
-│  • OAuth 2.0 handler                    │
-│  • Onshape REST API proxy (STEP export) │
-│  • Job queue & dispatcher               │
-└──────┬──────────────────────────────────┘
-       │ job dispatch (STEP + simulation config)
-       ├──────────────────────────────────►  Remote worker (cloud / HPC)
-       └──────────────────────────────────►  Local worker  (Docker / Apptainer)
+```mermaid
+flowchart TD
+    subgraph browser["Onshape (browser)"]
+        iframe["G4OCCT iframe tab\n(served by App Server over HTTPS)"]
+    end
+
+    subgraph server["G4OCCT App Server"]
+        oauth["OAuth 2.0 handler"]
+        proxy["Onshape REST API proxy\n(STEP export)"]
+        queue["Job queue & dispatcher"]
+    end
+
+    iframe -- "HTTPS + session cookie" --> server
+    queue -- "job dispatch\n(STEP + simulation config)" --> remote["Remote worker\n(cloud / HPC)"]
+    queue -- "job dispatch\n(STEP + simulation config)" --> local["Local worker\n(Docker / Apptainer)"]
 ```
 
-OAuth tokens are kept **server-side** and are **never** exposed to the browser
-or the iframe JavaScript context.
+> OAuth tokens are kept **server-side** and are **never** exposed to the browser
+> or the iframe JavaScript context.
 
 | Component | Technology |
 |---|---|
