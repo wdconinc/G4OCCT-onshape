@@ -6,6 +6,7 @@ primary_region = "iad"
 
 [build]
   dockerfile = "server/Dockerfile"
+  context = "server"
 
 [env]
   JOB_DB_PATH = "/data/jobs.db"
@@ -25,7 +26,7 @@ primary_region = "iad"
   [[services.ports]]
     handlers = ["http"]
     port = 80
-    [services.ports.force_https]
+    force_https = true
 
   [services.concurrency]
     type = "requests"

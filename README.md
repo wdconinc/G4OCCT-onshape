@@ -177,6 +177,12 @@ cp .env.example .env
 #   APP_HOST=http://localhost:8000
 #   SESSION_HTTPS_ONLY=false
 #   SESSION_COOKIE_SAMESITE=lax
+#
+# If you are testing inside an Onshape iframe via an HTTPS tunnel (ngrok /
+# Cloudflare Tunnel), cross-site cookie rules apply and you must instead use:
+#   APP_HOST=https://<your-tunnel-url>
+#   SESSION_HTTPS_ONLY=true
+#   SESSION_COOKIE_SAMESITE=none
 ```
 
 #### Step 3 — Run with Docker Compose
@@ -190,7 +196,8 @@ The App Server is available at http://localhost:8000. Open http://localhost:8000
 > **Note:** Onshape requires HTTPS to load the iframe. For local testing, expose localhost via [ngrok](https://ngrok.com/) or [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
 > ```bash
 > ngrok http 8000
-> # Update APP_HOST in .env and the redirect URI + iframe extension URL in the Developer Portal
+> # Update APP_HOST, SESSION_HTTPS_ONLY=true, and SESSION_COOKIE_SAMESITE=none in .env
+> # Update the redirect URI + iframe extension URL in the Developer Portal
 > ```
 
 #### Running without Docker (optional)
@@ -227,7 +234,7 @@ flyctl apps create g4occt-dev   # choose your own app name
 
 This gives you a stable URL: `https://g4occt-dev.fly.dev`
 
-> **Note:** The app name `g4occt-dev` and region `iad` in `fly.toml` are examples; update them to match your chosen app name and preferred region.
+> **Note:** The app name `g4occt-dev` and region `iad` in `fly.toml` are the canonical values for this repository's dev deployment. If you use a different app name, update `app` in `fly.toml` and regenerate `FLY_API_TOKEN` for that app.
 
 **2. Create a persistent volume for the SQLite job database**
 
