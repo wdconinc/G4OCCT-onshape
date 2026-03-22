@@ -5,8 +5,7 @@ app = "g4occt-dev"
 primary_region = "iad"
 
 [build]
-  dockerfile = "server/Dockerfile"
-  context = "server"
+  dockerfile = "Dockerfile"
 
 [env]
   JOB_DB_PATH = "/data/jobs.db"
