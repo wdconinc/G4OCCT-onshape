@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 G4OCCT Contributors
 fastapi==0.135.1
-uvicorn[standard]==0.34.0
+uvicorn[standard]==0.42.0
 httpx==0.28.1
 itsdangerous==2.2.0
 python-dotenv==1.2.2
