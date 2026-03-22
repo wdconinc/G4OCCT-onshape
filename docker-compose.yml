@@ -10,7 +10,7 @@
 services:
   server:
     build:
-      context: ./onshape-app/server
+      context: ./server
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -22,7 +22,7 @@ services:
       - WORKER_TOKEN=${WORKER_TOKEN}
       - JOB_DB_PATH=/data/jobs.db
     volumes:
-      - ./onshape-app/frontend:/app/frontend:ro
+      - ./frontend:/app/frontend:ro
       - job_data:/data
     restart: unless-stopped
     healthcheck:
@@ -33,7 +33,7 @@ services:
 
   worker:
     build:
-      context: ./onshape-app/worker
+      context: ./worker
     environment:
       - G4OCCT_SERVER=http://server:8000
       - G4OCCT_WORKER_TOKEN=${WORKER_TOKEN}

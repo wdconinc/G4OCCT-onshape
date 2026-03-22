@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 # Add the server directory to the import path.
-sys.path.insert(0, str(Path(__file__).parent.parent / "onshape-app" / "server"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "server"))
 
 from fastapi.testclient import TestClient
 
