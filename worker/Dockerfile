@@ -23,15 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python dependencies ───────────────────────────────────────────────────
-RUN python3 -m pip install --no-cache-dir httpx
+RUN python3 -m pip install --no-cache-dir --break-system-packages httpx
 
 # ── Worker script ─────────────────────────────────────────────────────────
 WORKDIR /app
 COPY run_worker.py /app/run_worker.py
 
 # ── Environment defaults ──────────────────────────────────────────────────
+# Note: G4OCCT_WORKER_TOKEN must be supplied at runtime via -e or docker-compose.
 ENV G4OCCT_SERVER=http://localhost:8000 \
-    G4OCCT_WORKER_TOKEN="" \
     G4OCCT_POLL_INTERVAL=5 \
     GEANT4_VERSION="unknown" \
     OCCT_VERSION="unknown" \
