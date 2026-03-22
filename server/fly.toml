@@ -2,7 +2,7 @@
 # See: https://fly.io/docs/reference/configuration/
 
 app = "g4occt-dev"
-primary_region = "iad"
+primary_region = "yyz"
 
 [build]
   dockerfile = "Dockerfile"
