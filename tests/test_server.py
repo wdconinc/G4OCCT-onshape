@@ -218,6 +218,22 @@ def test_app_authenticated_returns_html(authed_client):
     assert "doc123" in resp.text
     assert "ws456" in resp.text
     assert "el789" in resp.text
+    # User name and email must be injected so the header can display them.
+    assert _FAKE_USER["name"] in resp.text
+    assert _FAKE_USER["email"] in resp.text
+
+
+def test_app_authenticated_no_context(authed_client):
+    """Authenticated /app without document context still renders and exposes user info."""
+    resp = authed_client.get("/app")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "G4OCCT_CONTEXT" in resp.text
+    # User identity must be injected even when no document context is present.
+    assert _FAKE_USER["name"] in resp.text
+    assert _FAKE_USER["email"] in resp.text
+    # Null context values should appear in the injected script.
+    assert "documentId: null" in resp.text
 
 
 # ---------------------------------------------------------------------------
