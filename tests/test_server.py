@@ -359,6 +359,9 @@ def test_list_workers_api_authenticated(authed_client, client):
     workers = resp.json()
     assert isinstance(workers, list)
     assert any(w["id"] == "w-api-1" for w in workers)
+    # Ensure that the workers API does not expose sensitive fields like user_id.
+    for w in workers:
+        assert "user_id" not in w
 
 
 # ---------------------------------------------------------------------------

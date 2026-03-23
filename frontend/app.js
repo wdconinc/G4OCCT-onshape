@@ -245,7 +245,9 @@ let _activeTab = "jobs";
 function switchTab(tab) {
   _activeTab = tab;
   $("tab-jobs").classList.toggle("active", tab === "jobs");
+  $("tab-jobs").setAttribute("aria-selected", String(tab === "jobs"));
   $("tab-workers").classList.toggle("active", tab === "workers");
+  $("tab-workers").setAttribute("aria-selected", String(tab === "workers"));
   $("tab-content-jobs").classList.toggle("hidden", tab !== "jobs");
   $("tab-content-workers").classList.toggle("hidden", tab !== "workers");
   if (tab === "jobs") loadJobs();

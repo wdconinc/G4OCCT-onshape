@@ -437,7 +437,9 @@ async def get_job(request: Request, job_id: str):
 async def list_workers_api(request: Request):
     """Return registered workers for display in the frontend."""
     _require_user(request)
-    return await job_store.list_workers()
+    workers = await job_store.list_workers()
+    # Strip internal/sensitive fields such as user_id before returning to clients.
+    return [{k: v for k, v in worker.items() if k != "user_id"} for worker in workers]
 
 
 # ---------------------------------------------------------------------------
