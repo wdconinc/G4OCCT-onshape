@@ -207,8 +207,80 @@ async function pollJob(jobId, intervalMs = 3000, maxAttempts = 100) {
   }
 }
 
+// ── Load workers list ──────────────────────────────────────────────────────
+async function loadWorkers() {
+  const container = $("workers-list");
+  try {
+    const resp = await fetch("/api/workers");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const workers = await resp.json();
+    renderWorkerList(workers);
+  } catch (err) {
+    const p = document.createElement("p");
+    p.className = "empty-state";
+    p.textContent = `Error loading workers: ${err.message}`;
+    container.replaceChildren(p);
+  }
+}
+
+function renderWorkerList(workers) {
+  const container = $("workers-list");
+  if (!workers.length) {
+    container.innerHTML = '<p class="empty-state">No workers connected.</p>';
+    return;
+  }
+  const now = Date.now();
+  container.innerHTML = workers.map((w) => {
+    const lastSeen = new Date(w.last_seen);
+    const onlineCutoff = 30 * 1000; // 30 seconds
+    const isOnline = (now - lastSeen.getTime()) < onlineCutoff;
+    const statusClass = isOnline ? "status-online" : "status-idle";
+    const statusLabel = isOnline ? "online" : "idle";
+    let caps = {};
+    try { caps = JSON.parse(w.capabilities || "{}"); } catch { /* ignore */ }
+    const capsHtml = [
+      ["geant4_version", "Geant4"],
+      ["occt_version", "OCCT"],
+      ["g4occt_version", "G4OCCT"],
+    ]
+      .filter(([k]) => caps[k])
+      .map(([k, label]) => `${escHtml(label)}: ${escHtml(caps[k])}`)
+      .join(" &nbsp;·&nbsp; ");
+    return `
+      <div class="worker-item">
+        <div>
+          <div class="worker-id">${escHtml(w.id)}</div>
+          <div class="worker-meta">Last seen: ${escHtml(lastSeen.toLocaleString())}</div>
+          ${capsHtml ? `<div class="worker-caps">${capsHtml}</div>` : ""}
+        </div>
+        <span class="job-status ${escHtml(statusClass)}">${escHtml(statusLabel)}</span>
+      </div>`;
+  }).join("");
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+let _activeTab = "jobs";
+
+function switchTab(tab) {
+  _activeTab = tab;
+  $("tab-jobs").classList.toggle("active", tab === "jobs");
+  $("tab-jobs").setAttribute("aria-selected", String(tab === "jobs"));
+  $("tab-workers").classList.toggle("active", tab === "workers");
+  $("tab-workers").setAttribute("aria-selected", String(tab === "workers"));
+  $("tab-content-jobs").classList.toggle("hidden", tab !== "jobs");
+  $("tab-content-workers").classList.toggle("hidden", tab !== "workers");
+  if (tab === "jobs") loadJobs();
+  else loadWorkers();
+}
+
+$("tab-jobs").addEventListener("click", () => switchTab("jobs"));
+$("tab-workers").addEventListener("click", () => switchTab("workers"));
+
 // ── Refresh button ─────────────────────────────────────────────────────────
-$("refresh-jobs-btn").addEventListener("click", loadJobs);
+$("refresh-panel-btn").addEventListener("click", () => {
+  if (_activeTab === "jobs") loadJobs();
+  else loadWorkers();
+});
 
 // ── Utilities ──────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -256,3 +328,4 @@ function showNotification(msg, type = "info") {
 // ── Boot ───────────────────────────────────────────────────────────────────
 initContextPanel();
 loadJobs();
+loadWorkers();

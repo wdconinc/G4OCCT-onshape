@@ -66,10 +66,20 @@
       </form>
     </section>
 
-    <!-- Active jobs -->
+    <!-- Jobs / Workers tabbed panel -->
     <section class="card" id="jobs-panel">
-      <h2>Jobs <button class="btn btn-small" id="refresh-jobs-btn">↻ Refresh</button></h2>
-      <div id="jobs-list"><p class="empty-state">No jobs yet.</p></div>
+      <h2 class="sr-only">Jobs &amp; Workers</h2>
+      <div class="tab-bar" role="tablist" aria-label="Jobs and Workers">
+        <button class="tab-btn active" id="tab-jobs" role="tab" aria-selected="true" aria-controls="tab-content-jobs" data-tab="jobs">Jobs</button>
+        <button class="tab-btn" id="tab-workers" role="tab" aria-selected="false" aria-controls="tab-content-workers" data-tab="workers">Workers</button>
+        <button class="btn btn-small" id="refresh-panel-btn" style="margin-left:auto">↻ Refresh</button>
+      </div>
+      <div id="tab-content-jobs" role="tabpanel" aria-labelledby="tab-jobs">
+        <div id="jobs-list"><p class="empty-state">No jobs yet.</p></div>
+      </div>
+      <div id="tab-content-workers" role="tabpanel" aria-labelledby="tab-workers" class="hidden">
+        <div id="workers-list"><p class="empty-state">No workers connected.</p></div>
+      </div>
     </section>
 
     <!-- Results panel -->
