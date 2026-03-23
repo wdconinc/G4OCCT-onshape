@@ -6,10 +6,12 @@ These tests exercise the server endpoints using FastAPI's test client,
 without requiring real Onshape credentials or a running database.
 """
 
+import base64
+import httpx
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -118,6 +120,77 @@ def test_oauth_callback_no_state(client):
     # No session state at all.
     resp = client.get("/oauth/callback", params={"code": "abc", "state": "any"})
     assert resp.status_code == 400
+
+
+def test_oauth_callback_uses_basic_auth(client):
+    """Token exchange must use HTTP Basic Auth, not body params, for Onshape."""
+    import app as server_app
+
+    # Seed a valid state in the session via the /oauth/start redirect.
+    start_resp = client.get("/oauth/start", follow_redirects=False)
+    assert start_resp.status_code in (302, 307)
+
+    # Extract the state value that was stored in the session cookie.
+    from urllib.parse import urlparse, parse_qs
+    location = start_resp.headers["location"]
+    qs = parse_qs(urlparse(location).query)
+    state = qs["state"][0]
+
+    # Build the expected Basic-auth credentials.
+    expected_creds = base64.b64encode(b"test-client-id:test-client-secret").decode()
+
+    # Capture the request made to the Onshape token endpoint.
+    captured = {}
+
+    async def fake_post_token(url, **kwargs):
+        captured["url"] = url
+        captured["auth"] = kwargs.get("auth")
+        captured["data"] = kwargs.get("data", {})
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = ""
+        mock_resp.json.return_value = {
+            "access_token": "fake-token",
+            "refresh_token": "fake-refresh",
+        }
+        return mock_resp
+
+    # Patch the user info call so the callback can complete.
+    async def fake_onshape_get(*args, **kwargs):
+        return {"id": "u1", "name": "Test", "email": "t@t.com"}
+
+    with (
+        patch.object(server_app, "_onshape_get", side_effect=fake_onshape_get),
+    ):
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
+            mock_ctx.post = AsyncMock(side_effect=fake_post_token)
+            mock_client_cls.return_value = mock_ctx
+
+            resp = client.get(
+                "/oauth/callback",
+                params={"code": "authcode123", "state": state},
+                follow_redirects=False,
+            )
+
+    # The callback should redirect on success (not return 400/502).
+    assert resp.status_code in (302, 307), f"Unexpected status: {resp.status_code} {resp.text}"
+
+    # Verify httpx.BasicAuth was used for client authentication.
+    auth = captured.get("auth")
+    assert isinstance(auth, httpx.BasicAuth), (
+        f"Expected httpx.BasicAuth, got: {type(auth)!r}"
+    )
+    assert auth._auth_header == f"Basic {expected_creds}", (
+        f"BasicAuth encodes wrong credentials: {auth._auth_header!r}"
+    )
+
+    # Verify client credentials were NOT in the body.
+    body = captured.get("data", {})
+    assert "client_id" not in body, "client_id must not appear in the token request body"
+    assert "client_secret" not in body, "client_secret must not appear in the token request body"
 
 
 # ---------------------------------------------------------------------------
