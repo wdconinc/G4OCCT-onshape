@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright (C) 2026 G4OCCT Contributors
+#
+# Keep the Docker build context lean when building from the repo root.
+
+# Version control
+.git
+.gitignore
+
+# Secrets / local config
+.env
+.env.*
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+dist/
+build/
+
+# Node (if frontend tooling is added later)
+node_modules/
+.parcel-cache/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / editor artefacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# CI / GitHub metadata (not needed in image)
+.github/
+
+# Tests (not needed in runtime image)
+tests/
+
+# Apptainer image files
+*.sif
