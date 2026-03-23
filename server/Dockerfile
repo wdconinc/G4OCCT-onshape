@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 G4OCCT Contributors
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
