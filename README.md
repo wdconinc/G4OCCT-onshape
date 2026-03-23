@@ -122,8 +122,8 @@ G4OCCT-onshape/
 - [x] Outbound polling protocol (worker → App Server, no inbound connections required)
 - [x] Worker registration and heartbeat (`POST /workers/register`)
 - [x] Worker `Dockerfile` and Apptainer instructions for HPC environments without Docker
-- [x] GitHub Actions CI job that builds and pushes server and worker images to `ghcr.io`
-- [ ] **[human]** Publish the worker image so users can `docker pull ghcr.io/wdconinc/g4occt-worker:latest`
+- [x] GitHub Actions CI job that builds and pushes server and worker images to `ghcr.io` on every `v*` tag
+- [x] Worker image published at `ghcr.io/wdconinc/g4occt-worker:latest` (cut a `v*` tag to trigger release)
 - [ ] **[human]** Document the per-user worker token issuance flow in the App Server UI
 - [ ] **[human]** Test NAT traversal: worker on a laptop, App Server in the cloud
 
