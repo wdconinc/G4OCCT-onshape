@@ -57,8 +57,7 @@ G4OCCT-onshape/
 │   └── Dockerfile
 ├── worker/              G4OCCT simulation worker
 │   ├── run_worker.py    Polling loop + simulation runner stub
-│   ├── Dockerfile
-│   └── apptainer.def    Apptainer / Singularity definition for HPC
+│   └── Dockerfile
 ├── frontend/            iframe UI (served as static files by the App Server)
 │   ├── index.html
 │   ├── app.js
@@ -122,7 +121,7 @@ G4OCCT-onshape/
 
 - [x] Outbound polling protocol (worker → App Server, no inbound connections required)
 - [x] Worker registration and heartbeat (`POST /workers/register`)
-- [x] Worker `Dockerfile` and Apptainer `.def` for HPC environments without Docker
+- [x] Worker `Dockerfile` and Apptainer instructions for HPC environments without Docker
 - [x] GitHub Actions CI job that builds and pushes server and worker images to `ghcr.io`
 - [ ] **[human]** Publish the worker image so users can `docker pull ghcr.io/wdconinc/g4occt-worker:latest`
 - [ ] **[human]** Document the per-user worker token issuance flow in the App Server UI
@@ -311,10 +310,10 @@ docker run --rm \
   ghcr.io/wdconinc/g4occt-worker:latest
 ```
 
-Or with Apptainer on an HPC system:
+Or with Apptainer on an HPC system, build directly from the published Docker image:
 
 ```bash
-apptainer build g4occt-worker.sif worker/apptainer.def
+apptainer build g4occt-worker.sif docker://ghcr.io/wdconinc/g4occt-worker:latest
 G4OCCT_SERVER=https://<app-server-host> \
 G4OCCT_WORKER_TOKEN=<token> \
 apptainer run g4occt-worker.sif
