@@ -7,6 +7,7 @@ without requiring real Onshape credentials or a running database.
 """
 
 import base64
+import httpx
 import json
 import sys
 from pathlib import Path
@@ -143,7 +144,7 @@ def test_oauth_callback_uses_basic_auth(client):
 
     async def fake_post_token(url, **kwargs):
         captured["url"] = url
-        captured["headers"] = kwargs.get("headers", {})
+        captured["auth"] = kwargs.get("auth")
         captured["data"] = kwargs.get("data", {})
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -161,7 +162,6 @@ def test_oauth_callback_uses_basic_auth(client):
     with (
         patch.object(server_app, "_onshape_get", side_effect=fake_onshape_get),
     ):
-        import httpx
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
@@ -178,10 +178,13 @@ def test_oauth_callback_uses_basic_auth(client):
     # The callback should redirect on success (not return 400/502).
     assert resp.status_code in (302, 307), f"Unexpected status: {resp.status_code} {resp.text}"
 
-    # Verify Basic Auth header was sent.
-    auth_header = captured.get("headers", {}).get("Authorization", "")
-    assert auth_header == f"Basic {expected_creds}", (
-        f"Expected Basic Auth header, got: {auth_header!r}"
+    # Verify httpx.BasicAuth was used for client authentication.
+    auth = captured.get("auth")
+    assert isinstance(auth, httpx.BasicAuth), (
+        f"Expected httpx.BasicAuth, got: {type(auth)!r}"
+    )
+    assert auth._auth_header == f"Basic {expected_creds}", (
+        f"BasicAuth encodes wrong credentials: {auth._auth_header!r}"
     )
 
     # Verify client credentials were NOT in the body.

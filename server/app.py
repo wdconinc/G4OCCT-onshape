@@ -179,9 +179,6 @@ async def oauth_callback(
         raise HTTPException(status_code=400, detail="Invalid OAuth state parameter")
 
     # Onshape requires client credentials as HTTP Basic Auth, not in the body.
-    credentials = base64.b64encode(
-        f"{oauth_helper.CLIENT_ID}:{oauth_helper.CLIENT_SECRET}".encode()
-    ).decode()
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             oauth_helper.ONSHAPE_TOKEN_URL,
@@ -190,10 +187,8 @@ async def oauth_callback(
                 "code": code,
                 "redirect_uri": oauth_helper.REDIRECT_URI,
             },
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Basic {credentials}",
-            },
+            headers={"Accept": "application/json"},
+            auth=httpx.BasicAuth(oauth_helper.CLIENT_ID, oauth_helper.CLIENT_SECRET),
             timeout=30,
         )
     if resp.status_code != 200:
