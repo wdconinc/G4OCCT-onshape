@@ -433,6 +433,13 @@ async def get_job(request: Request, job_id: str):
     return job
 
 
+@app.get("/api/workers")
+async def list_workers_api(request: Request):
+    """Return registered workers for display in the frontend."""
+    _require_user(request)
+    return await job_store.list_workers()
+
+
 # ---------------------------------------------------------------------------
 # Worker API (used by both remote and local workers)
 # ---------------------------------------------------------------------------

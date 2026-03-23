@@ -340,6 +340,28 @@ def test_worker_reports_failure(authed_client):
 
 
 # ---------------------------------------------------------------------------
+# API workers endpoint
+# ---------------------------------------------------------------------------
+
+def test_list_workers_api_unauthenticated(client):
+    resp = client.get("/api/workers")
+    assert resp.status_code == 401
+
+
+def test_list_workers_api_authenticated(authed_client, client):
+    # Register a worker first.
+    client.post("/workers/register", json={
+        "worker_id": "w-api-1",
+        "capabilities": {"geant4_version": "11.2", "occt_version": "7.8"},
+    })
+    resp = authed_client.get("/api/workers")
+    assert resp.status_code == 200
+    workers = resp.json()
+    assert isinstance(workers, list)
+    assert any(w["id"] == "w-api-1" for w in workers)
+
+
+# ---------------------------------------------------------------------------
 # OAuth helpers (unit tests)
 # ---------------------------------------------------------------------------
 

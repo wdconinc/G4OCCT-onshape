@@ -66,10 +66,19 @@
       </form>
     </section>
 
-    <!-- Active jobs -->
+    <!-- Jobs / Workers tabbed panel -->
     <section class="card" id="jobs-panel">
-      <h2>Jobs <button class="btn btn-small" id="refresh-jobs-btn">↻ Refresh</button></h2>
-      <div id="jobs-list"><p class="empty-state">No jobs yet.</p></div>
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-jobs" data-tab="jobs">Jobs</button>
+        <button class="tab-btn" id="tab-workers" data-tab="workers">Workers</button>
+        <button class="btn btn-small" id="refresh-panel-btn" style="margin-left:auto">↻ Refresh</button>
+      </div>
+      <div id="tab-content-jobs">
+        <div id="jobs-list"><p class="empty-state">No jobs yet.</p></div>
+      </div>
+      <div id="tab-content-workers" class="hidden">
+        <div id="workers-list"><p class="empty-state">No workers connected.</p></div>
+      </div>
     </section>
 
     <!-- Results panel -->

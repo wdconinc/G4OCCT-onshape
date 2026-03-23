@@ -213,6 +213,53 @@ select:focus {
 /* ── Loading spinner ───────────────────────────────────────────────────── */
 .loading { color: var(--color-muted); font-style: italic; }
 
+/* ── Tab bar ────────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 5px 14px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-bottom 0.15s;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-btn:hover { color: var(--color-text); }
+.tab-btn.active { color: var(--color-primary); border-bottom: 2px solid var(--color-primary); }
+
+/* ── Worker list ────────────────────────────────────────────────────────── */
+.worker-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.worker-id { font-family: monospace; color: var(--color-muted); font-size: 0.75rem; }
+.worker-meta { color: var(--color-muted); font-size: 0.8rem; margin-top: 2px; }
+.worker-caps { color: var(--color-muted); font-size: 0.8rem; margin-top: 4px; }
+
+.status-online { background: #e6f4ea; color: var(--color-success); }
+.status-idle   { background: var(--color-bg); color: var(--color-muted); }
+
 /* ── Footer ────────────────────────────────────────────────────────────── */
 .app-footer {
   padding: 10px 20px;
