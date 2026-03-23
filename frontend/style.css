@@ -199,6 +199,17 @@ select:focus {
 
 .empty-state { color: var(--color-muted); font-size: 0.875rem; }
 
+/* ── No-context notice ─────────────────────────────────────────────────── */
+.no-context-notice {
+  font-size: 0.875rem;
+  color: var(--color-warning);
+  background: #fef7e0;
+  border: 1px solid #f0d070;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
 /* ── Results ───────────────────────────────────────────────────────────── */
 #results-content pre {
   background: var(--color-bg);

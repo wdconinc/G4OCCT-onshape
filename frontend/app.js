@@ -28,8 +28,9 @@ function initContextPanel() {
   text("ctx-workspaceId", ctx.workspaceId || "—");
   text("ctx-elementId", ctx.elementId || "—");
 
-  if (ctx.userName) {
-    $("user-info").textContent = ctx.userName;
+  if (ctx.userName || ctx.userEmail) {
+    const parts = [ctx.userName, ctx.userEmail].filter(Boolean);
+    $("user-info").textContent = parts.join(" · ");
   }
 
   if (ctx.documentId && ctx.workspaceId && ctx.elementId) {
@@ -37,6 +38,24 @@ function initContextPanel() {
   } else {
     text("ctx-elementName", "No document context");
     text("ctx-elementType", "—");
+    showNoContextNotice();
+  }
+}
+
+// ── No-context notice ──────────────────────────────────────────────────────
+function showNoContextNotice() {
+  const notice = document.createElement("p");
+  notice.className = "no-context-notice";
+  notice.textContent =
+    "Open this app inside an Onshape document tab to provide document context and enable simulation.";
+  const simControls = $("sim-controls");
+  if (simControls) {
+    simControls.insertBefore(notice, simControls.querySelector("form"));
+  }
+  const btn = $("submit-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.title = "A document context is required to run a simulation.";
   }
 }
 
