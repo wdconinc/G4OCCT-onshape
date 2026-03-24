@@ -60,10 +60,12 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
+// ── nlohmann/json ─────────────────────────────────────────────────────────────
+#include <nlohmann/json.hpp>
 
 // ── Geant4 ───────────────────────────────────────────────────────────────────
 #include <G4Box.hh>
@@ -97,77 +99,6 @@
 #include <TopoDS_Shape.hxx>
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Minimal JSON helpers (no external dependency)
-// ─────────────────────────────────────────────────────────────────────────────
-
-namespace json_util {
-
-/// Extract the string value for @p key from a flat JSON object string.
-/// Returns empty string if the key is not found.
-std::string get_string(const std::string& json, const std::string& key) {
-  // Look for "key": "value"
-  const std::string search = "\"" + key + "\"";
-  auto pos                 = json.find(search);
-  if (pos == std::string::npos)
-    return {};
-  pos = json.find(':', pos + search.size());
-  if (pos == std::string::npos)
-    return {};
-  // Skip whitespace
-  pos = json.find_first_not_of(" \t\r\n", pos + 1);
-  if (pos == std::string::npos || json[pos] != '"')
-    return {};
-  ++pos;
-  auto end = json.find('"', pos);
-  if (end == std::string::npos)
-    return {};
-  return json.substr(pos, end - pos);
-}
-
-/// Extract the integer value for @p key from a flat JSON object string.
-/// Returns @p default_val if the key is not found or cannot be parsed.
-long long get_int(const std::string& json, const std::string& key, long long default_val = 0) {
-  const std::string search = "\"" + key + "\"";
-  auto pos                 = json.find(search);
-  if (pos == std::string::npos)
-    return default_val;
-  pos = json.find(':', pos + search.size());
-  if (pos == std::string::npos)
-    return default_val;
-  pos = json.find_first_not_of(" \t\r\n", pos + 1);
-  if (pos == std::string::npos)
-    return default_val;
-  char* end    = nullptr;
-  long long rv = std::strtoll(json.c_str() + pos, &end, 10);
-  if (end == json.c_str() + pos)
-    return default_val;
-  return rv;
-}
-
-/// Escape a string for safe embedding in JSON.
-std::string escape(const std::string& s) {
-  std::string out;
-  out.reserve(s.size());
-  for (char c : s) {
-    if (c == '"')
-      out += "\\\"";
-    else if (c == '\\')
-      out += "\\\\";
-    else if (c == '\n')
-      out += "\\n";
-    else if (c == '\r')
-      out += "\\r";
-    else if (c == '\t')
-      out += "\\t";
-    else
-      out += c;
-  }
-  return out;
-}
-
-} // namespace json_util
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Runner configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -184,21 +115,19 @@ RunnerConfig load_config(const std::string& path) {
   std::ifstream ifs(path);
   if (!ifs)
     throw std::runtime_error("Cannot open config file: " + path);
-  std::ostringstream ss;
-  ss << ifs.rdbuf();
-  const std::string json = ss.str();
+  nlohmann::json j = nlohmann::json::parse(ifs);
 
   RunnerConfig cfg;
-  if (auto v = json_util::get_string(json, "step"); !v.empty())
-    cfg.step_file = v;
-  if (auto v = json_util::get_string(json, "type"); !v.empty())
-    cfg.sim_type = v;
-  if (auto v = json_util::get_string(json, "particle"); !v.empty())
-    cfg.particle = v;
-  if (auto v = json_util::get_int(json, "nEvents", -1); v != -1)
-    cfg.n_events = v;
-  if (auto v = json_util::get_string(json, "output"); !v.empty())
-    cfg.output_file = v;
+  if (j.contains("step") && j["step"].is_string())
+    cfg.step_file = j["step"].get<std::string>();
+  if (j.contains("type") && j["type"].is_string())
+    cfg.sim_type = j["type"].get<std::string>();
+  if (j.contains("particle") && j["particle"].is_string())
+    cfg.particle = j["particle"].get<std::string>();
+  if (j.contains("nEvents") && j["nEvents"].is_number_integer())
+    cfg.n_events = j["nEvents"].get<long long>();
+  if (j.contains("output") && j["output"].is_string())
+    cfg.output_file = j["output"].get<std::string>();
   return cfg;
 }
 
@@ -374,24 +303,23 @@ void write_results_json(const RunnerConfig& cfg, const std::string& status,
       cfg.n_events > 0 ? static_cast<double>(total_steps) / static_cast<double>(cfg.n_events)
                        : 0.0;
 
+  nlohmann::json j;
+  j["status"]             = status;
+  j["type"]               = cfg.sim_type;
+  j["particle"]           = cfg.particle;
+  j["nEvents"]            = cfg.n_events;
+  j["step_file"]          = cfg.step_file;
+  j["total_steps"]        = total_steps;
+  j["total_edep_MeV"]     = total_edep_MeV;
+  j["avg_steps_per_event"] = avg_steps;
+  if (!error_msg.empty())
+    j["error"] = error_msg;
+
   std::ofstream ofs(cfg.output_file);
   if (!ofs) {
     throw std::runtime_error("Cannot open output file for writing: " + cfg.output_file);
   }
-
-  ofs << "{\n";
-  ofs << "  \"status\": \"" << json_util::escape(status) << "\",\n";
-  ofs << "  \"type\": \"" << json_util::escape(cfg.sim_type) << "\",\n";
-  ofs << "  \"particle\": \"" << json_util::escape(cfg.particle) << "\",\n";
-  ofs << "  \"nEvents\": " << cfg.n_events << ",\n";
-  ofs << "  \"step_file\": \"" << json_util::escape(cfg.step_file) << "\",\n";
-  ofs << "  \"total_steps\": " << total_steps << ",\n";
-  ofs << "  \"total_edep_MeV\": " << total_edep_MeV << ",\n";
-  ofs << "  \"avg_steps_per_event\": " << avg_steps;
-  if (!error_msg.empty()) {
-    ofs << ",\n  \"error\": \"" << json_util::escape(error_msg) << "\"";
-  }
-  ofs << "\n}\n";
+  ofs << j.dump(2) << "\n";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

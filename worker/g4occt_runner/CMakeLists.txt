@@ -26,11 +26,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(G4OCCT REQUIRED)
 # G4OCCT::G4OCCT pulls in Geant4 and OpenCASCADE transitively.
 
+find_package(nlohmann_json 3.12.0 QUIET)
+if(NOT nlohmann_json_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa)
+  FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
 # ─── Executable ──────────────────────────────────────────────────────────────
 
 add_executable(g4occt_runner main.cc)
 
-target_link_libraries(g4occt_runner PRIVATE G4OCCT::G4OCCT)
+target_link_libraries(g4occt_runner PRIVATE G4OCCT::G4OCCT nlohmann_json::nlohmann_json)
 
 # ─── Installation ─────────────────────────────────────────────────────────────
 
