@@ -97,13 +97,9 @@ def poll_for_job(client: httpx.Client) -> dict | None:
 def run_simulation(job: dict) -> dict:
     """Run the G4OCCT simulation and return a results dict.
 
-    In a production deployment this would:
-    1. Write the STEP data to a temp file.
-    2. Invoke the compiled G4OCCT binary (e.g. ``g4occt_runner``).
-    3. Parse the output JSON and return it.
-
-    Here we provide a stub implementation that validates the STEP data exists
-    and returns placeholder diagnostics.
+    Writes the STEP data to a temp file, creates a JSON steering file,
+    then invokes the ``g4occt_runner`` binary with the simulation parameters.
+    Falls back to a diagnostic stub if the runner binary is not installed.
     """
     sim_config = json.loads(job.get("sim_config", "{}"))
     step_data = job.get("step_data", "")
@@ -125,23 +121,30 @@ def run_simulation(job: dict) -> dict:
 
         # Attempt to invoke the real G4OCCT runner; fall back to stub output.
         runner = os.environ.get("G4OCCT_RUNNER", "g4occt_runner")
+        output_path = os.path.join(tmpdir, "results.json")
+
+        # Write a JSON steering file and pass it to the runner via --config.
+        steering = {
+            "step": step_path,
+            "type": sim_config.get("type", "geantino_scan"),
+            "particle": sim_config.get("particleType", "geantino"),
+            "nEvents": sim_config.get("nEvents", 1000),
+            "output": output_path,
+        }
+        steering_path = os.path.join(tmpdir, "steering.json")
+        with open(steering_path, "w") as fh:
+            json.dump(steering, fh)
+
         try:
             result = subprocess.run(
-                [
-                    runner,
-                    "--step", step_path,
-                    "--type", sim_config.get("type", "geantino_scan"),
-                    "--particle", sim_config.get("particleType", "geantino"),
-                    "--events", str(sim_config.get("nEvents", 1000)),
-                    "--output", os.path.join(tmpdir, "results.json"),
-                ],
+                [runner, "--config", steering_path],
                 capture_output=True,
                 text=True,
                 timeout=3600,
             )
             if result.returncode != 0:
                 raise RuntimeError(result.stderr)
-            with open(os.path.join(tmpdir, "results.json")) as fh:
+            with open(output_path) as fh:
                 return json.load(fh)
         except FileNotFoundError:
             # Runner not installed – return a diagnostic stub.

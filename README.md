@@ -40,8 +40,8 @@ flowchart TD
 | App Server | Python · FastAPI |
 | Job queue | SQLite (development); swap for Redis/PostgreSQL in production |
 | Frontend | Plain HTML + JS (no build step required) |
-| Worker | Python polling loop + G4OCCT binary |
-| Container | Docker / Apptainer |
+| Worker | Python polling loop + G4OCCT simulation runner |
+| Container | Docker / Apptainer (based on `ghcr.io/eic/eic_xl:nightly`) |
 
 ---
 
@@ -56,8 +56,11 @@ G4OCCT-onshape/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── worker/              G4OCCT simulation worker
-│   ├── run_worker.py    Polling loop + simulation runner stub
-│   └── Dockerfile
+│   ├── run_worker.py    Polling loop + simulation runner
+│   ├── g4occt_runner/   C++ G4OCCT runner (CLI + JSON steering)
+│   │   ├── CMakeLists.txt
+│   │   └── main.cc
+│   └── Dockerfile       Based on ghcr.io/eic/eic_xl:nightly
 ├── frontend/            iframe UI (served as static files by the App Server)
 │   ├── index.html
 │   ├── app.js
@@ -302,6 +305,12 @@ The `publish-containers.yml` workflow already publishes versioned container imag
 
 ## Local Worker
 
+The worker container is based on `ghcr.io/eic/eic_xl:nightly`, which provides
+Geant4 and OpenCASCADE Technology (OCCT).  The G4OCCT library is built from
+[github.com/eic/G4OCCT](https://github.com/eic/G4OCCT) and installed
+into the image, along with a C++ `g4occt_runner` executable that loads STEP
+geometry files, runs Geant4 simulations, and writes JSON results.
+
 Start a local simulation worker that polls the App Server for jobs:
 
 ```bash
@@ -318,6 +327,48 @@ apptainer build g4occt-worker.sif docker://ghcr.io/wdconinc/g4occt-worker:latest
 G4OCCT_SERVER=https://<app-server-host> \
 G4OCCT_WORKER_TOKEN=<token> \
 apptainer run g4occt-worker.sif
+```
+
+### Running the G4OCCT runner standalone
+
+The `g4occt_runner` binary can also be invoked directly with CLI arguments or a
+JSON steering file:
+
+```bash
+# CLI arguments
+g4occt_runner --step geometry.step \
+              --type geantino_scan \
+              --particle geantino \
+              --events 1000 \
+              --output results.json
+
+# JSON steering file
+g4occt_runner --config steering.json
+```
+
+Steering file format (`steering.json`):
+```json
+{
+  "step":     "geometry.step",
+  "type":     "geantino_scan",
+  "particle": "geantino",
+  "nEvents":  1000,
+  "output":   "results.json"
+}
+```
+
+Output JSON format (`results.json`):
+```json
+{
+  "status": "complete",
+  "type": "geantino_scan",
+  "particle": "geantino",
+  "nEvents": 1000,
+  "step_file": "geometry.step",
+  "total_steps": 5432,
+  "total_edep_MeV": 0.0,
+  "avg_steps_per_event": 5.432
+}
 ```
 
 ---
