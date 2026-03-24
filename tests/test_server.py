@@ -434,20 +434,28 @@ def test_export_gltf_invalid_element_type(authed_client):
 
 def test_export_gltf_success(authed_client):
     """A successful translation flow returns glTF bytes with the correct content type."""
-    import app as server_app
+    def _resp(json_val=None, content=None):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if json_val is not None:
+            r.json = MagicMock(return_value=json_val)
+        if content is not None:
+            r.content = content
+        return r
 
-    mock_post_json = AsyncMock(return_value={"id": "trans-abc"})
-    poll_responses = [
-        {"requestState": "ACTIVE"},
-        {"requestState": "DONE", "resultExternalDataIds": ["data-xyz"]},
-    ]
-    mock_get = AsyncMock(side_effect=poll_responses)
-    mock_get_bytes = AsyncMock(return_value=b"GLB-binary-content")
+    init_resp   = _resp(json_val={"id": "trans-abc"})
+    poll_active = _resp(json_val={"requestState": "ACTIVE"})
+    poll_done   = _resp(json_val={"requestState": "DONE", "resultExternalDataIds": ["data-xyz"]})
+    dl_resp     = _resp(content=b"GLB-binary-content")
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=init_resp)
+    mock_client.get = AsyncMock(side_effect=[poll_active, poll_done, dl_resp])
 
     with (
-        patch.object(server_app, "_onshape_post_json", mock_post_json),
-        patch.object(server_app, "_onshape_get", mock_get),
-        patch.object(server_app, "_onshape_get_bytes", mock_get_bytes),
+        patch("httpx.AsyncClient", return_value=mock_client),
         patch("asyncio.sleep", new=AsyncMock()),
     ):
         resp = authed_client.post(
@@ -460,21 +468,28 @@ def test_export_gltf_success(authed_client):
     assert resp.headers["content-type"].startswith("model/gltf-binary")
 
     # Verify the translation was initiated with the correct body.
-    call_args = mock_post_json.call_args
-    assert call_args[0][1].endswith("/translations")
-    assert call_args[0][2] == {"formatName": "GLTF", "storeInDocument": False}
+    post_call = mock_client.post.call_args
+    assert "/translations" in post_call[0][0]
+    assert post_call[1]["json"] == {"formatName": "GLTF", "storeInDocument": False}
 
 
 def test_export_gltf_translation_failure(authed_client):
     """A FAILED translation state must result in a 502 response."""
-    import app as server_app
+    def _resp(json_val=None):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if json_val is not None:
+            r.json = MagicMock(return_value=json_val)
+        return r
 
-    mock_post_json = AsyncMock(return_value={"id": "trans-fail"})
-    mock_get = AsyncMock(return_value={"requestState": "FAILED"})
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=_resp(json_val={"id": "trans-fail"}))
+    mock_client.get = AsyncMock(return_value=_resp(json_val={"requestState": "FAILED"}))
 
     with (
-        patch.object(server_app, "_onshape_post_json", mock_post_json),
-        patch.object(server_app, "_onshape_get", mock_get),
+        patch("httpx.AsyncClient", return_value=mock_client),
         patch("asyncio.sleep", new=AsyncMock()),
     ):
         resp = authed_client.post(

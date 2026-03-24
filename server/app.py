@@ -409,47 +409,71 @@ async def export_gltf(
     # Step 1: Initiate translation.
     api_prefix = "partstudios" if elementType == "partstudio" else "assemblies"
     translate_path = f"/{api_prefix}/d/{documentId}/w/{workspaceId}/e/{elementId}/translations"
-    try:
-        translation = await _onshape_post_json(
-            user["access_token"],
-            translate_path,
-            {"formatName": "GLTF", "storeInDocument": False},
-        )
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
 
-    translation_id = translation.get("id")
-    if not translation_id:
-        raise HTTPException(status_code=502, detail="Translation initiation did not return an ID")
-
-    # Step 2: Poll for completion (up to 120 s, polling every 2 s).
-    status: dict
-    for _ in range(GLTF_MAX_POLLS):
-        await asyncio.sleep(GLTF_POLL_INTERVAL)
+    # Reuse one client for the whole initiate → poll → download lifecycle to
+    # avoid repeated TCP/TLS handshakes during the polling loop.
+    async with httpx.AsyncClient() as client:
+        auth_header = {"Authorization": f"Bearer {user['access_token']}"}
         try:
-            status = await _onshape_get(user["access_token"], f"/translations/{translation_id}")
+            r = await client.post(
+                f"{ONSHAPE_API_BASE}{translate_path}",
+                headers={**auth_header, "Content-Type": "application/json", "Accept": "application/json"},
+                json={"formatName": "GLTF", "storeInDocument": False},
+                timeout=30,
+            )
+            r.raise_for_status()
+            translation = r.json()
         except httpx.HTTPStatusError as exc:
             raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
-        state = status.get("requestState")
-        if state == "DONE":
-            break
-        if state == "FAILED":
-            raise HTTPException(status_code=502, detail="Onshape translation failed")
-    else:
-        raise HTTPException(status_code=504, detail="glTF translation timed out")
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"Network error contacting Onshape: {exc}")
 
-    # Step 3: Download the result.
-    result_ids = status.get("resultExternalDataIds", [])
-    if not result_ids:
-        raise HTTPException(status_code=502, detail="Translation completed but returned no data")
+        translation_id = translation.get("id")
+        if not translation_id:
+            raise HTTPException(status_code=502, detail="Translation initiation did not return an ID")
 
-    try:
-        gltf_bytes = await _onshape_get_bytes(
-            user["access_token"],
-            f"/documents/d/{documentId}/externaldata/{result_ids[0]}",
-        )
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+        # Step 2: Poll for completion (up to 120 s, polling every 2 s).
+        status: dict
+        for _ in range(GLTF_MAX_POLLS):
+            await asyncio.sleep(GLTF_POLL_INTERVAL)
+            try:
+                r = await client.get(
+                    f"{ONSHAPE_API_BASE}/translations/{translation_id}",
+                    headers={**auth_header, "Accept": "application/json"},
+                    timeout=30,
+                )
+                r.raise_for_status()
+                status = r.json()
+            except httpx.HTTPStatusError as exc:
+                raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+            except httpx.RequestError as exc:
+                raise HTTPException(status_code=502, detail=f"Network error contacting Onshape: {exc}")
+            state = status.get("requestState")
+            if state == "DONE":
+                break
+            if state == "FAILED":
+                raise HTTPException(status_code=502, detail="Onshape translation failed")
+        else:
+            raise HTTPException(status_code=504, detail="glTF translation timed out")
+
+        # Step 3: Download the result.
+        result_ids = status.get("resultExternalDataIds", [])
+        if not result_ids:
+            raise HTTPException(status_code=502, detail="Translation completed but returned no data")
+
+        try:
+            r = await client.get(
+                f"{ONSHAPE_API_BASE}/documents/d/{documentId}/externaldata/{result_ids[0]}",
+                headers={**auth_header, "Accept": "application/octet-stream"},
+                timeout=120,
+                follow_redirects=True,
+            )
+            r.raise_for_status()
+            gltf_bytes = r.content
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"Network error contacting Onshape: {exc}")
 
     return Response(
         content=gltf_bytes,

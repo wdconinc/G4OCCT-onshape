@@ -68,12 +68,43 @@ function initViewer(containerId) {
   });
 }
 
+// ── GPU resource disposal ──────────────────────────────────────────────────
+
+function _disposeMaterial(material) {
+  if (!material || typeof material.dispose !== "function") return;
+  for (const key in material) {
+    const value = material[key];
+    if (value && value.isTexture && typeof value.dispose === "function") {
+      value.dispose();
+    }
+  }
+  material.dispose();
+}
+
+function _disposeModel(model) {
+  if (!model) return;
+  model.traverse((child) => {
+    if (child.isMesh || child.isPoints || child.isLine) {
+      if (child.geometry && typeof child.geometry.dispose === "function") {
+        child.geometry.dispose();
+      }
+      const mat = child.material;
+      if (Array.isArray(mat)) {
+        mat.forEach(_disposeMaterial);
+      } else if (mat) {
+        _disposeMaterial(mat);
+      }
+    }
+  });
+}
+
 // ── glTF loading ───────────────────────────────────────────────────────────
 
 function loadGltf(url) {
-  // Remove previous model from scene
+  // Remove and dispose previous model from scene to free GPU memory
   if (_currentModel) {
     _scene.remove(_currentModel);
+    _disposeModel(_currentModel);
     _currentModel = null;
   }
 
@@ -140,7 +171,23 @@ if (_btn) {
     });
 
     try {
-      await loadGltf(`/api/element/export-gltf?${params}`);
+      // The export endpoint is POST-only; fetch the GLB binary and hand it to
+      // GLTFLoader via a temporary object URL to avoid a GET 405 error.
+      const response = await fetch(`/api/element/export-gltf?${params}`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Server returned ${response.status} ${response.statusText}`,
+        );
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        await loadGltf(objectUrl);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     } catch (err) {
       console.error("Failed to load glTF geometry:", err);
       alert(`Failed to load geometry: ${err.message || String(err)}`);
