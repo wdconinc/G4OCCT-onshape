@@ -403,3 +403,90 @@ def test_oauth_build_authorization_url():
     assert qs.get("state") == ["test-state-xyz"]
     assert qs.get("response_type") == ["code"]
 
+
+# ---------------------------------------------------------------------------
+# glTF export endpoint
+# ---------------------------------------------------------------------------
+
+def test_export_gltf_unauthenticated(client):
+    """Unauthenticated requests must receive 401."""
+    resp = client.post(
+        "/api/element/export-gltf",
+        params={"documentId": "d1", "workspaceId": "w1", "elementId": "e1"},
+    )
+    assert resp.status_code == 401
+
+
+def test_export_gltf_invalid_element_type(authed_client):
+    """A bad elementType must receive 400 without making any Onshape API calls."""
+    resp = authed_client.post(
+        "/api/element/export-gltf",
+        params={
+            "documentId": "d1",
+            "workspaceId": "w1",
+            "elementId": "e1",
+            "elementType": "drawing",
+        },
+    )
+    assert resp.status_code == 400
+    assert "elementType" in resp.json()["detail"]
+
+
+def test_export_gltf_success(authed_client):
+    """A successful translation flow returns glTF bytes with the correct content type."""
+    import app as server_app
+
+    mock_post_json = AsyncMock(return_value={"id": "trans-abc"})
+    poll_responses = [
+        {"requestState": "ACTIVE"},
+        {"requestState": "DONE", "resultExternalDataIds": ["data-xyz"]},
+    ]
+    mock_get = AsyncMock(side_effect=poll_responses)
+    mock_get_bytes = AsyncMock(return_value=b"GLB-binary-content")
+
+    with (
+        patch.object(server_app, "_onshape_post_json", mock_post_json),
+        patch.object(server_app, "_onshape_get", mock_get),
+        patch.object(server_app, "_onshape_get_bytes", mock_get_bytes),
+        patch("asyncio.sleep", new=AsyncMock()),
+    ):
+        resp = authed_client.post(
+            "/api/element/export-gltf",
+            params={"documentId": "d1", "workspaceId": "w1", "elementId": "e1"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == b"GLB-binary-content"
+    assert resp.headers["content-type"].startswith("model/gltf-binary")
+
+    # Verify the translation was initiated with the correct body.
+    call_args = mock_post_json.call_args
+    assert call_args[0][1].endswith("/translations")
+    assert call_args[0][2] == {"formatName": "GLTF", "storeInDocument": False}
+
+
+def test_export_gltf_translation_failure(authed_client):
+    """A FAILED translation state must result in a 502 response."""
+    import app as server_app
+
+    mock_post_json = AsyncMock(return_value={"id": "trans-fail"})
+    mock_get = AsyncMock(return_value={"requestState": "FAILED"})
+
+    with (
+        patch.object(server_app, "_onshape_post_json", mock_post_json),
+        patch.object(server_app, "_onshape_get", mock_get),
+        patch("asyncio.sleep", new=AsyncMock()),
+    ):
+        resp = authed_client.post(
+            "/api/element/export-gltf",
+            params={
+                "documentId": "d1",
+                "workspaceId": "w1",
+                "elementId": "e1",
+                "elementType": "assembly",
+            },
+        )
+
+    assert resp.status_code == 502
+    assert "failed" in resp.json()["detail"].lower()
+

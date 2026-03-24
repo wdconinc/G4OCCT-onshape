@@ -7,6 +7,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>G4OCCT – Geant4 Simulation</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
   <header class="app-header">
@@ -26,6 +34,19 @@
         <dt>Element name</dt><dd id="ctx-elementName"><span class="loading">Loading…</span></dd>
         <dt>Element type</dt><dd id="ctx-elementType">—</dd>
       </dl>
+    </section>
+
+    <!-- Geometry preview panel -->
+    <section class="card" id="viewer-panel">
+      <h2>Geometry Preview</h2>
+      <div id="viewer-container">
+        <div id="viewer-loading" class="viewer-loading hidden">
+          <span class="loading">Exporting geometry…</span>
+        </div>
+      </div>
+      <div class="viewer-controls">
+        <button class="btn btn-primary" id="load-geometry-btn">Load Geometry</button>
+      </div>
     </section>
 
     <!-- Simulation controls -->
@@ -98,5 +119,6 @@
   </footer>
 
   <script src="/static/app.js"></script>
+  <script type="module" src="/static/viewer.js"></script>
 </body>
 </html>
