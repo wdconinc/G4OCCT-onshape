@@ -12,8 +12,8 @@
 #     -e G4OCCT_WORKER_TOKEN=<token-from-app-ui> \
 #     ghcr.io/wdconinc/g4occt-worker:latest
 
-# ── Base image: EIC CI nightly (includes Geant4 + OCCT + full HEP stack) ──
-FROM ghcr.io/eic/eic_ci:nightly
+# ── Base image: EIC XL nightly (includes Geant4 + OCCT + full HEP stack) ──
+FROM ghcr.io/eic/eic_xl:nightly
 
 # ── System dependencies for Python worker ────────────────────────────────
 # The eic_ci image includes cmake, gcc, Geant4, and OpenCASCADE.
