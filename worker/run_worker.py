@@ -125,6 +125,20 @@ def run_simulation(job: dict) -> dict:
 
         # Attempt to invoke the real G4OCCT runner; fall back to stub output.
         runner = os.environ.get("G4OCCT_RUNNER", "g4occt_runner")
+        output_path = os.path.join(tmpdir, "results.json")
+
+        # Write a JSON steering file so the runner can also be driven that way.
+        steering = {
+            "step": step_path,
+            "type": sim_config.get("type", "geantino_scan"),
+            "particle": sim_config.get("particleType", "geantino"),
+            "nEvents": sim_config.get("nEvents", 1000),
+            "output": output_path,
+        }
+        steering_path = os.path.join(tmpdir, "steering.json")
+        with open(steering_path, "w") as fh:
+            json.dump(steering, fh)
+
         try:
             result = subprocess.run(
                 [
@@ -133,7 +147,7 @@ def run_simulation(job: dict) -> dict:
                     "--type", sim_config.get("type", "geantino_scan"),
                     "--particle", sim_config.get("particleType", "geantino"),
                     "--events", str(sim_config.get("nEvents", 1000)),
-                    "--output", os.path.join(tmpdir, "results.json"),
+                    "--output", output_path,
                 ],
                 capture_output=True,
                 text=True,
@@ -141,7 +155,7 @@ def run_simulation(job: dict) -> dict:
             )
             if result.returncode != 0:
                 raise RuntimeError(result.stderr)
-            with open(os.path.join(tmpdir, "results.json")) as fh:
+            with open(output_path) as fh:
                 return json.load(fh)
         except FileNotFoundError:
             # Runner not installed – return a diagnostic stub.
