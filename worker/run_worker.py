@@ -97,13 +97,9 @@ def poll_for_job(client: httpx.Client) -> dict | None:
 def run_simulation(job: dict) -> dict:
     """Run the G4OCCT simulation and return a results dict.
 
-    In a production deployment this would:
-    1. Write the STEP data to a temp file.
-    2. Invoke the compiled G4OCCT binary (e.g. ``g4occt_runner``).
-    3. Parse the output JSON and return it.
-
-    Here we provide a stub implementation that validates the STEP data exists
-    and returns placeholder diagnostics.
+    Writes the STEP data to a temp file, creates a JSON steering file,
+    then invokes the ``g4occt_runner`` binary with the simulation parameters.
+    Falls back to a diagnostic stub if the runner binary is not installed.
     """
     sim_config = json.loads(job.get("sim_config", "{}"))
     step_data = job.get("step_data", "")
