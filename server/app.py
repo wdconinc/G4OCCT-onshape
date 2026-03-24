@@ -22,6 +22,7 @@ Run locally
 
 """
 
+import asyncio
 import base64
 import json
 import os
@@ -84,6 +85,10 @@ if not _WORKER_TOKEN and not _DEV_MODE:
         "Set DEV_MODE=true to disable token enforcement during local development."
     )
 
+# Poll settings for the glTF translation status endpoint.
+GLTF_POLL_INTERVAL = 2   # seconds between polls
+GLTF_MAX_POLLS = 60      # 60 × 2 s = 120 s timeout
+
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
@@ -141,6 +146,39 @@ async def _onshape_post(access_token: str, path: str, body: dict) -> bytes:
                 "Accept": "application/octet-stream",
             },
             json=body,
+            timeout=120,
+            follow_redirects=True,
+        )
+    r.raise_for_status()
+    return r.content
+
+
+async def _onshape_post_json(access_token: str, path: str, body: dict) -> dict:
+    """Issue an authenticated POST to the Onshape REST API and return JSON."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{ONSHAPE_API_BASE}{path}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=body,
+            timeout=30,
+        )
+    r.raise_for_status()
+    return r.json()
+
+
+async def _onshape_get_bytes(access_token: str, path: str) -> bytes:
+    """Issue an authenticated GET to the Onshape REST API and return raw bytes."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ONSHAPE_API_BASE}{path}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/octet-stream",
+            },
             timeout=120,
             follow_redirects=True,
         )
@@ -340,6 +378,107 @@ async def export_step(
         content=step_bytes,
         media_type="application/octet-stream",
         headers={"Content-Disposition": 'attachment; filename="geometry.step"'},
+    )
+
+
+@app.post("/api/element/export-gltf")
+async def export_gltf(
+    request: Request,
+    documentId: str = Query(...),
+    workspaceId: str = Query(...),
+    elementId: str = Query(...),
+    elementType: str = Query("partstudio"),
+):
+    """Export the glTF file for the active element via the Onshape Translations API.
+
+    *elementType* must be ``"partstudio"`` or ``"assembly"``.
+
+    The translation is an asynchronous three-step process:
+
+    1. Initiate the translation (POST → returns a translation ID).
+    2. Poll the translation status until ``requestState`` is ``"DONE"`` or
+       ``"FAILED"`` (every 2 s, up to 120 s).
+    3. Download the resulting GLB file.
+
+    Returns the raw GLB bytes with ``Content-Type: model/gltf-binary``.
+    """
+    user = _require_user(request)
+    if elementType not in ("partstudio", "assembly"):
+        raise HTTPException(status_code=400, detail="elementType must be 'partstudio' or 'assembly'")
+
+    # Step 1: Initiate translation.
+    api_prefix = "partstudios" if elementType == "partstudio" else "assemblies"
+    translate_path = f"/{api_prefix}/d/{documentId}/w/{workspaceId}/e/{elementId}/translations"
+
+    # Reuse one client for the whole initiate → poll → download lifecycle to
+    # avoid repeated TCP/TLS handshakes during the polling loop.
+    async with httpx.AsyncClient() as client:
+        auth_header = {"Authorization": f"Bearer {user['access_token']}"}
+        try:
+            r = await client.post(
+                f"{ONSHAPE_API_BASE}{translate_path}",
+                headers={**auth_header, "Content-Type": "application/json", "Accept": "application/json"},
+                json={"formatName": "GLTF", "storeInDocument": False},
+                timeout=30,
+            )
+            r.raise_for_status()
+            translation = r.json()
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"Network error contacting Onshape: {exc}")
+
+        translation_id = translation.get("id")
+        if not translation_id:
+            raise HTTPException(status_code=502, detail="Translation initiation did not return an ID")
+
+        # Step 2: Poll for completion (up to 120 s, polling every 2 s).
+        status: dict
+        for _ in range(GLTF_MAX_POLLS):
+            await asyncio.sleep(GLTF_POLL_INTERVAL)
+            try:
+                r = await client.get(
+                    f"{ONSHAPE_API_BASE}/translations/{translation_id}",
+                    headers={**auth_header, "Accept": "application/json"},
+                    timeout=30,
+                )
+                r.raise_for_status()
+                status = r.json()
+            except httpx.HTTPStatusError as exc:
+                raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+            except httpx.RequestError as exc:
+                raise HTTPException(status_code=502, detail=f"Network error contacting Onshape: {exc}")
+            state = status.get("requestState")
+            if state == "DONE":
+                break
+            if state == "FAILED":
+                raise HTTPException(status_code=502, detail="Onshape translation failed")
+        else:
+            raise HTTPException(status_code=504, detail="glTF translation timed out")
+
+        # Step 3: Download the result.
+        result_ids = status.get("resultExternalDataIds", [])
+        if not result_ids:
+            raise HTTPException(status_code=502, detail="Translation completed but returned no data")
+
+        try:
+            r = await client.get(
+                f"{ONSHAPE_API_BASE}/documents/d/{documentId}/externaldata/{result_ids[0]}",
+                headers={**auth_header, "Accept": "application/octet-stream"},
+                timeout=120,
+                follow_redirects=True,
+            )
+            r.raise_for_status()
+            gltf_bytes = r.content
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"Network error contacting Onshape: {exc}")
+
+    return Response(
+        content=gltf_bytes,
+        media_type="model/gltf-binary",
+        headers={"Content-Disposition": 'attachment; filename="geometry.glb"'},
     )
 
 

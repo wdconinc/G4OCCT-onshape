@@ -112,7 +112,8 @@ G4OCCT-onshape/
 - [x] Job submission and status display
 - [x] Client-side job polling loop
 - [x] Results display (JSON viewer)
-- [ ] **[human / future]** Richer results visualisation: geometry summary, material map, 3D viewer (Three.js / Plotly)
+- [x] Geometry preview: glTF export from Onshape + Three.js viewer in iframe
+- [ ] **[human / future]** Richer results visualisation: geometry summary, material map, simulation overlays
 - [ ] **[human / future]** WebSocket-based push updates instead of polling
 
 ### Phase 5 — Local Worker ✅
@@ -346,6 +347,7 @@ sent to the browser.
 |---|---|---|
 | `GET /api/element/metadata` | `documentId`, `workspaceId`, `elementId` | Element name and type |
 | `POST /api/element/export-step` | `documentId`, `workspaceId`, `elementId`, `elementType` | Export STEP geometry |
+| `POST /api/element/export-gltf` | `documentId`, `workspaceId`, `elementId`, `elementType` | Export glTF geometry for 3D preview (uses Onshape Translations API; returns GLB with `Content-Type: model/gltf-binary`) |
 
 ### Job Management
 
