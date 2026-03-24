@@ -26,7 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(G4OCCT REQUIRED)
 # G4OCCT::G4OCCT pulls in Geant4 and OpenCASCADE transitively.
 
-find_package(nlohmann_json 3.12.0 QUIET)
+find_package(nlohmann_json 3.2.0 QUIET)
 if(NOT nlohmann_json_FOUND)
   include(FetchContent)
   FetchContent_Declare(

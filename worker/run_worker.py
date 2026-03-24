@@ -123,7 +123,7 @@ def run_simulation(job: dict) -> dict:
         runner = os.environ.get("G4OCCT_RUNNER", "g4occt_runner")
         output_path = os.path.join(tmpdir, "results.json")
 
-        # Write a JSON steering file so the runner can also be driven that way.
+        # Write a JSON steering file and pass it to the runner via --config.
         steering = {
             "step": step_path,
             "type": sim_config.get("type", "geantino_scan"),
@@ -137,14 +137,7 @@ def run_simulation(job: dict) -> dict:
 
         try:
             result = subprocess.run(
-                [
-                    runner,
-                    "--step", step_path,
-                    "--type", sim_config.get("type", "geantino_scan"),
-                    "--particle", sim_config.get("particleType", "geantino"),
-                    "--events", str(sim_config.get("nEvents", 1000)),
-                    "--output", output_path,
-                ],
+                [runner, "--config", steering_path],
                 capture_output=True,
                 text=True,
                 timeout=3600,

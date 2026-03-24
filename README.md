@@ -41,7 +41,7 @@ flowchart TD
 | Job queue | SQLite (development); swap for Redis/PostgreSQL in production |
 | Frontend | Plain HTML + JS (no build step required) |
 | Worker | Python polling loop + G4OCCT simulation runner |
-| Container | Docker / Apptainer (based on `ghcr.io/eic/eic_ci:nightly`) |
+| Container | Docker / Apptainer (based on `ghcr.io/eic/eic_xl:nightly`) |
 
 ---
 
@@ -60,7 +60,7 @@ G4OCCT-onshape/
 │   ├── g4occt_runner/   C++ G4OCCT runner (CLI + JSON steering)
 │   │   ├── CMakeLists.txt
 │   │   └── main.cc
-│   └── Dockerfile       Based on ghcr.io/eic/eic_ci:nightly
+│   └── Dockerfile       Based on ghcr.io/eic/eic_xl:nightly
 ├── frontend/            iframe UI (served as static files by the App Server)
 │   ├── index.html
 │   ├── app.js
@@ -304,9 +304,9 @@ The `publish-containers.yml` workflow already publishes versioned container imag
 
 ## Local Worker
 
-The worker container is based on `ghcr.io/eic/eic_ci:nightly`, which provides
+The worker container is based on `ghcr.io/eic/eic_xl:nightly`, which provides
 Geant4 and OpenCASCADE Technology (OCCT).  The G4OCCT library is built from
-[github.com/wdconinc/G4OCCT](https://github.com/wdconinc/G4OCCT) and installed
+[github.com/eic/G4OCCT](https://github.com/eic/G4OCCT) and installed
 into the image, along with a C++ `g4occt_runner` executable that loads STEP
 geometry files, runs Geant4 simulations, and writes JSON results.
 

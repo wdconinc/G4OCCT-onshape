@@ -16,7 +16,7 @@
 FROM ghcr.io/eic/eic_xl:nightly
 
 # ── System dependencies for Python worker ────────────────────────────────
-# The eic_ci image includes cmake, gcc, Geant4, and OpenCASCADE.
+# The eic_xl image includes cmake, gcc, Geant4, and OpenCASCADE.
 # We add git (to clone G4OCCT) and the Python pip installer.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
@@ -59,7 +59,9 @@ COPY run_worker.py /app/run_worker.py
 
 # ── Environment defaults ──────────────────────────────────────────────────
 # Note: G4OCCT_WORKER_TOKEN must be supplied at runtime via -e or docker-compose.
-# Geant4 and OCCT versions are read from the eic_ci environment at build time.
+# Geant4 and OCCT versions are optionally provided via environment variables
+# (e.g. GEANT4_VERSION, OCCT_VERSION, G4OCCT_VERSION) and may be reported
+# as "unknown" if not set by the base image or at runtime.
 ENV G4OCCT_SERVER=http://localhost:8000 \
     G4OCCT_POLL_INTERVAL=5 \
     G4OCCT_RUNNER=g4occt_runner

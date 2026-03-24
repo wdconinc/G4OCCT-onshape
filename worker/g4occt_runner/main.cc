@@ -52,8 +52,10 @@
 /// @endcode
 
 // ── C++ standard library ─────────────────────────────────────────────────────
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -172,11 +174,21 @@ public:
     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
 
     // OCCT units are mm; Geant4 units are also mm by default via G4SystemOfUnits.
-    // Add 20 % margin on each side for the world volume.
-    const double margin = 0.2;
-    const double wx     = std::max(std::abs(xmax - xmin) * (1.0 + margin), 10.0);
-    const double wy     = std::max(std::abs(ymax - ymin) * (1.0 + margin), 10.0);
-    const double wz     = std::max(std::abs(zmax - zmin) * (1.0 + margin), 10.0);
+    // Add 20 % margin on each side for the world volume, and compute G4Box half-lengths.
+    const double marginPerSide = 0.2; // 20 % extra extent on each side
+    const double dx            = std::abs(xmax - xmin);
+    const double dy            = std::abs(ymax - ymin);
+    const double dz            = std::abs(zmax - zmin);
+    // Base half-lengths from the raw bounding-box extents.
+    const double hx = 0.5 * dx;
+    const double hy = 0.5 * dy;
+    const double hz = 0.5 * dz;
+    // Apply 20 % margin per side: full size scales by (1 + 2*marginPerSide),
+    // so half-lengths scale by the same factor.
+    const double scale = 1.0 + 2.0 * marginPerSide;
+    const double wx     = std::max(hx * scale, 10.0);
+    const double wy     = std::max(hy * scale, 10.0);
+    const double wz     = std::max(hz * scale, 10.0);
 
     // Centre of the STEP geometry in OCCT space.
     const double cx = (xmin + xmax) * 0.5;
@@ -350,6 +362,11 @@ static RunnerConfig parse_args(int argc, char** argv) {
   RunnerConfig cfg;
   std::string  config_file;
 
+  // Track which options were explicitly provided on the command line so that
+  // config-file values do not silently override explicit CLI choices.
+  bool has_step = false, has_type = false, has_particle = false,
+       has_events = false, has_output = false;
+
   for (int i = 1; i < argc; ++i) {
     std::string_view arg = argv[i];
 
@@ -366,11 +383,11 @@ static RunnerConfig parse_args(int argc, char** argv) {
     } else if (arg == "--config") {
       config_file = next();
     } else if (arg == "--step") {
-      cfg.step_file = next();
+      cfg.step_file = next(); has_step = true;
     } else if (arg == "--type") {
-      cfg.sim_type = next();
+      cfg.sim_type = next(); has_type = true;
     } else if (arg == "--particle") {
-      cfg.particle = next();
+      cfg.particle = next(); has_particle = true;
     } else if (arg == "--events") {
       std::string val = next();
       char*       end = nullptr;
@@ -379,30 +396,29 @@ static RunnerConfig parse_args(int argc, char** argv) {
       if (errno != 0 || end == val.c_str() || *end != '\0' || n <= 0) {
         throw std::runtime_error("Invalid value for --events: " + val);
       }
-      cfg.n_events = n;
+      cfg.n_events = n; has_events = true;
     } else if (arg == "--output") {
-      cfg.output_file = next();
+      cfg.output_file = next(); has_output = true;
     } else {
       throw std::runtime_error(std::string("Unknown option: ") + std::string(arg));
     }
   }
 
-  // If a config file was given, load it and override any individual options
-  // that were also specified on the command line (CLI takes precedence over
-  // the defaults in the file, but the file provides the base configuration).
+  // If a config file was given, load it first and then apply any explicit CLI
+  // overrides.  Tracking which flags were set on the CLI (rather than comparing
+  // against struct defaults) ensures that a user who explicitly passes a value
+  // equal to the default still takes precedence over the config file.
   if (!config_file.empty()) {
     RunnerConfig from_file = load_config(config_file);
-    // Override file values with explicit CLI values where the CLI value
-    // differs from the struct default (a simplification: CLI always wins).
-    if (cfg.step_file == "geometry.step" && !from_file.step_file.empty())
+    if (!has_step && !from_file.step_file.empty())
       cfg.step_file = from_file.step_file;
-    if (cfg.sim_type == "geantino_scan" && !from_file.sim_type.empty())
+    if (!has_type && !from_file.sim_type.empty())
       cfg.sim_type = from_file.sim_type;
-    if (cfg.particle == "geantino" && !from_file.particle.empty())
+    if (!has_particle && !from_file.particle.empty())
       cfg.particle = from_file.particle;
-    if (cfg.n_events == 1000 && from_file.n_events != 1000)
+    if (!has_events)
       cfg.n_events = from_file.n_events;
-    if (cfg.output_file == "results.json" && !from_file.output_file.empty())
+    if (!has_output && !from_file.output_file.empty())
       cfg.output_file = from_file.output_file;
   }
 
