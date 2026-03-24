@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # to /usr/local so that downstream CMake projects can find it.
 ARG G4OCCT_REF=main
 RUN git clone --depth 1 --branch "${G4OCCT_REF}" \
-        https://github.com/wdconinc/G4OCCT.git /tmp/G4OCCT \
+        https://github.com/eic/G4OCCT.git /tmp/G4OCCT \
     && cmake -S /tmp/G4OCCT -B /tmp/G4OCCT/build \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TESTING=OFF \
