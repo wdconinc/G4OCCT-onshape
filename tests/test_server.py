@@ -233,7 +233,7 @@ def test_app_authenticated_no_context(authed_client):
     assert _FAKE_USER["name"] in resp.text
     assert _FAKE_USER["email"] in resp.text
     # Null context values should appear in the injected script.
-    assert "documentId: null" in resp.text
+    assert '"documentId": null' in resp.text
 
 
 # ---------------------------------------------------------------------------
