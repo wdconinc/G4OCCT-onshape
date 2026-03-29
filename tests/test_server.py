@@ -233,7 +233,18 @@ def test_app_authenticated_no_context(authed_client):
     assert _FAKE_USER["name"] in resp.text
     assert _FAKE_USER["email"] in resp.text
     # Null context values should appear in the injected script.
-    assert "documentId: null" in resp.text
+    assert '"documentId": null' in resp.text
+
+
+def test_app_context_script_injection_escaped(authed_client):
+    """Hostile values containing </script> must not break out of the script block."""
+    resp = authed_client.get(
+        "/app",
+        params={"documentId": "</script><script>alert(1)</script>"},
+    )
+    assert resp.status_code == 200
+    # The raw </script> sequence from the hostile input must not appear verbatim.
+    assert "</script><script>" not in resp.text
 
 
 # ---------------------------------------------------------------------------

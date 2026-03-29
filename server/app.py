@@ -292,15 +292,19 @@ async def serve_app(
     # Serve the static index.html – inject context via a <script> block so
     # that the frontend JS can read it without embedding OAuth tokens.
     html = (FRONTEND_DIR / "index.html").read_text()
+    context = {
+        "documentId": documentId,
+        "workspaceId": workspaceId,
+        "elementId": elementId,
+        "userName": user.get("name", ""),
+        "userEmail": user.get("email", ""),
+    }
+    # Escape </script to prevent untrusted values from breaking out of the
+    # inline script block and enabling reflected XSS.
+    context_json = json.dumps(context).replace("</script", "<\\/script")
     context_script = f"""
 <script>
-  window.G4OCCT_CONTEXT = {{
-    documentId: {json.dumps(documentId)},
-    workspaceId: {json.dumps(workspaceId)},
-    elementId: {json.dumps(elementId)},
-    userName: {json.dumps(user.get('name', ''))},
-    userEmail: {json.dumps(user.get('email', ''))}
-  }};
+  window.G4OCCT_CONTEXT = {context_json};
 </script>"""
     html = html.replace("</head>", f"{context_script}\n</head>", 1)
     return HTMLResponse(html)
