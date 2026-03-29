@@ -299,7 +299,9 @@ async def serve_app(
         "userName": user.get("name", ""),
         "userEmail": user.get("email", ""),
     }
-    context_json = json.dumps(context)
+    # Escape </script to prevent untrusted values from breaking out of the
+    # inline script block and enabling reflected XSS.
+    context_json = json.dumps(context).replace("</script", "<\\/script")
     context_script = f"""
 <script>
   window.G4OCCT_CONTEXT = {context_json};
