@@ -29,6 +29,7 @@ import os
 import secrets
 import urllib.parse
 from pathlib import Path
+import html as html_lib
 
 # Load .env before importing local modules that read env vars at module level.
 from dotenv import load_dotenv
@@ -306,7 +307,8 @@ async def serve_app(
 <script>
   window.G4OCCT_CONTEXT = {context_json};
 </script>"""
-    html = html.replace("</head>", f"{context_script}\n</head>", 1)
+    escaped_context_script = html_lib.escape(context_script, quote=False)
+    html = html.replace("</head>", f"{escaped_context_script}\n</head>", 1)
     return HTMLResponse(html)
 
 
