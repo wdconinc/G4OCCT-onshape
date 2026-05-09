@@ -240,11 +240,13 @@ def test_app_context_script_injection_escaped(authed_client):
     """Hostile values containing </script> must not break out of the script block."""
     resp = authed_client.get(
         "/app",
-        params={"documentId": "</script><script>alert(1)</script>"},
+        params={"documentId": "</script><script>alert(1)</script>&x"},
     )
     assert resp.status_code == 200
     # The raw </script> sequence from the hostile input must not appear verbatim.
     assert "</script><script>" not in resp.text
+    assert "\\u003c/script\\u003e\\u003cscript\\u003e" in resp.text
+    assert "\\u0026x" in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -515,4 +517,3 @@ def test_export_gltf_translation_failure(authed_client):
 
     assert resp.status_code == 502
     assert "failed" in resp.json()["detail"].lower()
-
