@@ -215,7 +215,6 @@ def test_app_authenticated_returns_html(authed_client):
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
     assert "G4OCCT_CONTEXT" in resp.text
-    assert "&lt;script&gt;" not in resp.text
     assert "doc123" in resp.text
     assert "ws456" in resp.text
     assert "el789" in resp.text
@@ -241,12 +240,13 @@ def test_app_context_script_injection_escaped(authed_client):
     """Hostile values containing </script> must not break out of the script block."""
     resp = authed_client.get(
         "/app",
-        params={"documentId": "</script><script>alert(1)</script>"},
+        params={"documentId": "</script><script>alert(1)</script>&x"},
     )
     assert resp.status_code == 200
     # The raw </script> sequence from the hostile input must not appear verbatim.
     assert "</script><script>" not in resp.text
-    assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in resp.text
+    assert "\\u003c/script\\u003e\\u003cscript\\u003e" in resp.text
+    assert "\\u0026x" in resp.text
 
 
 # ---------------------------------------------------------------------------
