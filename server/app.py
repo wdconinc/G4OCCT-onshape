@@ -29,7 +29,6 @@ import os
 import secrets
 import urllib.parse
 from pathlib import Path
-import html as html_lib
 
 # Load .env before importing local modules that read env vars at module level.
 from dotenv import load_dotenv
@@ -300,15 +299,19 @@ async def serve_app(
         "userName": user.get("name", ""),
         "userEmail": user.get("email", ""),
     }
-    # Escape </script to prevent untrusted values from breaking out of the
-    # inline script block and enabling reflected XSS.
-    context_json = json.dumps(context).replace("</script", "<\\/script")
+    # Encode characters that can affect HTML parsing when embedding JSON inside
+    # an inline <script> block, preventing script-breakout XSS.
+    context_json = (
+        json.dumps(context)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
     context_script = f"""
 <script>
   window.G4OCCT_CONTEXT = {context_json};
 </script>"""
-    escaped_context_script = html_lib.escape(context_script, quote=False)
-    html = html.replace("</head>", f"{escaped_context_script}\n</head>", 1)
+    html = html.replace("</head>", f"{context_script}\n</head>", 1)
     return HTMLResponse(html)
 
 

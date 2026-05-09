@@ -215,6 +215,7 @@ def test_app_authenticated_returns_html(authed_client):
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
     assert "G4OCCT_CONTEXT" in resp.text
+    assert "&lt;script&gt;" not in resp.text
     assert "doc123" in resp.text
     assert "ws456" in resp.text
     assert "el789" in resp.text
@@ -245,6 +246,7 @@ def test_app_context_script_injection_escaped(authed_client):
     assert resp.status_code == 200
     # The raw </script> sequence from the hostile input must not appear verbatim.
     assert "</script><script>" not in resp.text
+    assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -515,4 +517,3 @@ def test_export_gltf_translation_failure(authed_client):
 
     assert resp.status_code == 502
     assert "failed" in resp.json()["detail"].lower()
-
